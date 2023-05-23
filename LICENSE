@@ -1,7 +1,6 @@
-Cantrip is a Discord bot, written in Python using the Pycord API, with the goal of making the
-popular tabletop game “Dungeons and Dragons 5th Edition” (D&D 5e) easier to organize and
-play by providing a suite of organizational and planning tools.
-Copyright (c) 2023 Scott Fisher, Richard Roa, Sinjin Serrano, & David Wolfe
+Backstab is a custom Discord bot, written for the Battlefield 2: Modern Combat Veterans community, 
+that can provide server status information and other useful related information.
+Copyright (c) 2023 David Wolfe (Red-Thirten)
 
 
 					GNU GENERAL PUBLIC LICENSE
@@ -637,10 +636,9 @@ to attach them to the start of each source file to most effectively
 state the exclusion of warranty; and each file should have at least
 the "copyright" line and a pointer to where the full notice is found.
 
-    Cantrip is a Discord bot, written in Python using the Pycord API, with the goal of making the
-    popular tabletop game “Dungeons and Dragons 5th Edition” (D&D 5e) easier to organize and
-    play by providing a suite of organizational and planning tools.
-    Copyright (c) 2023 Scott Fisher, Richard Roa, Sinjin Serrano, & David Wolfe
+    Backstab is a custom Discord bot, written for the Battlefield 2: Modern Combat Veterans community, 
+    that can provide server status information and other useful related information.
+    Copyright (c) 2023 David Wolfe (Red-Thirten)
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -660,8 +658,8 @@ Also add information on how to contact you by electronic and paper mail.
   If the program does terminal interaction, make it output a short
 notice like this when it starts in an interactive mode:
 
-    Cantrip Discord Bot
-    Copyright (c) 2023 Scott Fisher, Richard Roa, Sinjin Serrano, & David Wolfe
+    Backstab Discord Bot
+    Copyright (c) 2023 David Wolfe (Red-Thirten)
     This program comes with ABSOLUTELY NO WARRANTY.
     This is free software, and you are welcome to redistribute it
     under certain conditions; see LICENSE file for details.
