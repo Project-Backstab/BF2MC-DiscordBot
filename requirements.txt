@@ -1,0 +1,4 @@
+py-cord
+requests
+beautifulsoup4
+lxml
