@@ -1,30 +1,23 @@
 """main.py
 
 Main file to start Backstab
-Date: 05/22/2023
+Date: 05/23/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
 
 import sys
-import json
 
 import discord
 from discord.ext import commands
 from src import BackstabBot
 
 def main():
-    VERSION = "1.0.1"
+    VERSION = "2.0.0"
     AUTHORS = "Red-Thirten"
     COGS_LIST = [
         "CogServerStatus"
     ]
-
-    # Load configuration file
-    with open('config.cfg') as file:
-        # Load the JSON data
-        CONFIG = json.load(file)
-
 
     """Discord Bot -- Main
 
@@ -35,15 +28,16 @@ def main():
     intents.members = True
     intents.message_content = True
     # Setup activity of bot
-    activity = discord.Activity(type=discord.ActivityType.playing, name="Battlefield 2: Modern Combat Online")
+    activity = discord.Activity(type=discord.ActivityType.watching, name="0 Veterans online")
     
     # Create the bot object
-    bot = BackstabBot(CONFIG, intents=intents, activity=activity)
+    bot = BackstabBot(intents=intents, activity=activity)
 
     # Add cogs to bot
     for cog in COGS_LIST:
         bot.load_extension(f'cogs.{cog}')
     
+
     @bot.event
     async def on_message(message):
         """Event: On Message
@@ -54,8 +48,8 @@ def main():
             if 'good bot' in message.content.lower():
                 await message.channel.send("Aww shucks!", reference=message)
 
-    @bot.slash_command(guild_ids=[CONFIG['GuildID']], name = "about", description="Displays information about the Backstab Bot.")
-    @commands.cooldown(1, 60, commands.BucketType.user) # A single user can only call this every 60 seconds
+
+    @bot.slash_command(guild_ids=[bot.config['GuildID']], name = "about", description="Displays information about the Backstab Bot.")
     async def about(ctx):
         """Slash Command: /about
         
@@ -70,7 +64,7 @@ def main():
         )
         _embed.set_author(
             name="Backstab", 
-            icon_url="https://cdn.discordapp.com/banners/502923049541304320/95731bc0d72d26769cb94d90b92c71c7.webp"
+            icon_url="https://raw.githubusercontent.com/lilkingjr1/backstab-discord-bot/main/assets/icon.png"
         )
         _embed.set_thumbnail(url="https://cdn.discordapp.com/icons/502923049541304320/4d8d584de5d9baec281d4861c6b11781.webp?size=4096")
         # Construct string of bot commands for display
@@ -82,10 +76,32 @@ def main():
         _embed.add_field(name="Authors:", value=AUTHORS, inline=True)
         _embed.add_field(name="Version:", value=VERSION, inline=True)
         _embed.set_footer(text=f"Bot latency is {bot.latency}")
-        await ctx.respond(embed=_embed)
+        await ctx.respond(embed=_embed, ephemeral=True)
+        
+    @bot.slash_command(guild_ids=[bot.config['GuildID']], name = "say", description="Makes the bot say something. Only admins can do this.")
+    @discord.default_permissions(manage_channels=True) # Only members with Manage Channels permission can use this command.
+    async def say(ctx, text: discord.Option(str)):
+        """Slash Command: /say
+        
+        Makes the bot say something. Only admins can do this.
+        """
+        await ctx.send(text)
+        await ctx.respond("...", delete_after=0)
+        print(f"{bot.get_datetime_str()}: {ctx.author.name} made bot say \"{text}\"")
+        
+    @bot.slash_command(guild_ids=[bot.config['GuildID']], name = "reloadconfig", description="Reloads the bot's config file. Only admins can do this.")
+    @discord.default_permissions(manage_channels=True) # Only members with Manage Channels permission can use this command.
+    async def reloadconfig(ctx):
+        """Slash Command: /reloadconfig
+        
+        Reloads the bot's config file. Only admins can do this.
+        """
+        bot.reload_config()
+        await ctx.respond(f"Config reloaded.", ephemeral=True)
+        print(f"{bot.get_datetime_str()}: {ctx.author.name} reloaded the config file.")
 
-    @bot.slash_command(guild_ids=[CONFIG['GuildID']], name = "shutdown", description="Cleanly shuts Backstab down. Only admins can do this.")
-    @discord.default_permissions(administrator=True) # Only members with admin can use this command.
+    @bot.slash_command(guild_ids=[bot.config['GuildID']], name = "shutdown", description="Cleanly shuts Backstab down. Only admins can do this.")
+    @discord.default_permissions(manage_channels=True) # Only members with Manage Channels permission can use this command.
     async def shutdown(ctx):
         """Slash Command: /shutdown
         
@@ -95,6 +111,7 @@ def main():
         await ctx.respond("Goodbye.")
         await bot.close()
 
+
     # Attempt to start the bot
     print(f"{bot.get_datetime_str()}: [Startup] Bot attempting to login to Discord...")
     try:
@@ -102,6 +119,7 @@ def main():
     except Exception as e:
         print(f"ERROR: {e}")
         sys.exit(1)
+
 
 if __name__ == '__main__':
     main()

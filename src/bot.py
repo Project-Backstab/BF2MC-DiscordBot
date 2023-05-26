@@ -1,20 +1,31 @@
 """bot.py
 
 A subclass of `discord.Bot` that adds ease-of-use instance variables and functions (e.g. database object).
-Date: 05/20/2023
+Date: 05/23/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
 
+import json
 from datetime import datetime
 
 import discord
 from discord.ext import commands
 
+
+def get_config():
+    """Loads config file and returns JSON data"""
+    # Load configuration file
+    with open('config.cfg') as file:
+        # Load the JSON data
+        _data = json.load(file)
+    return _data
+
+
 class BackstabBot(discord.Bot):
-    def __init__(self, config, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.config = config
+        self.config = get_config()
     
     async def on_ready(self):
         """Event: On Ready
@@ -44,3 +55,7 @@ class BackstabBot(discord.Bot):
         """Return a formatted datetime string for logging"""
         _now = datetime.now()
         return _now.strftime("%m/%d/%Y %H:%M:%S")
+    
+    def reload_config(self):
+        """Reloads config from file and reassigns its data to the bot"""
+        self.config = get_config()
