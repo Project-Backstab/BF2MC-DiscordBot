@@ -25,7 +25,7 @@ GM_STRINGS = {
 TEAM_STRINGS = {
     "US": ":flag_us:  United States:",
     "CH": ":flag_cn:  China:",
-    "ME": ":flag_ir:  Middle Eastern Coalition:",
+    "AC": ":flag_ir:  Middle Eastern Coalition:",
     "EU": ":flag_eu:  European Union:"
 }
 STATUS_ONLINE_STR = "SERVERS: ONLINE 🟢"
