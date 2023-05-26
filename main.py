@@ -1,7 +1,7 @@
 """main.py
 
 Main file to start Backstab
-Date: 05/25/2023
+Date: 05/26/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -13,7 +13,7 @@ from discord.ext import commands
 from src import BackstabBot
 
 def main():
-    VERSION = "2.0.1"
+    VERSION = "2.0.2"
     AUTHORS = "Red-Thirten"
     COGS_LIST = [
         "CogServerStatus"
@@ -86,7 +86,7 @@ def main():
         Makes the bot say something. Only admins can do this.
         """
         await ctx.send(text)
-        await ctx.respond("...", delete_after=0)
+        await ctx.respond("...", ephemeral=True, delete_after=0)
         print(f"{bot.get_datetime_str()}: {ctx.author.name} made bot say \"{text}\"")
         
     @bot.slash_command(guild_ids=[bot.config['GuildID']], name = "reloadconfig", description="Reloads the bot's config file. Only admins can do this.")
@@ -108,7 +108,7 @@ def main():
         Cleanly shuts Backstab down. Only admins can do this.
         """
         print(f"{bot.get_datetime_str()}: [Shutdown] Shutdown command issued by {ctx.author.name}#{ctx.author.discriminator}.")
-        await ctx.respond("Goodbye.")
+        await ctx.respond("Goodbye.", ephemeral=True)
         await bot.close()
 
 
