@@ -185,12 +185,28 @@ class CogServerStatus(discord.Cog):
         """
         print(f"{self.bot.get_datetime_str()}: [ServerStatus] Successfully cached!")
         
+        # Check that all channels in the config are valid
+        _cfg_keys = [
+            'StatusVoiceChannelID',
+            'StatsTextChannelID',
+            'AnnouncementTextChannelID'
+        ]
+        for _key in _cfg_keys:
+            _channel_id = self.bot.config['ServerStatus'][_key]
+            if self.bot.get_channel(_channel_id) == None:
+                print(f"ERROR: [Config] Could not find valid channel with ID: {_channel_id}")
+                await self.bot.close()
+        
         # Start Status Loop
         if not self.StatusLoop.is_running():
             _config_interval = self.bot.config['ServerStatus']['UpdateIntervalMinutes']
             self.StatusLoop.change_interval(minutes=_config_interval)
             self.StatusLoop.start()
             print(f"{self.bot.get_datetime_str()}: [ServerStatus] StatusLoop started ({_config_interval} min. interval).")
+
+        # Set stats channel description
+        _text_channel = self.bot.get_channel(self.bot.config['ServerStatus']['StatsTextChannelID'])
+        await _text_channel.edit(topic=f"Live server statistics (Updated every {P.no('second', round(_config_interval*60))})")
     
 
     @tasks.loop(minutes=5)
@@ -199,12 +215,6 @@ class CogServerStatus(discord.Cog):
         
         Runs every interval period, queries API, updates status voice channel, and updates info text channel.
         """
-        # Update interval if it differs from config
-        _config_interval = self.bot.config['ServerStatus']['UpdateIntervalMinutes']
-        if self.StatusLoop.minutes != _config_interval:
-            self.StatusLoop.change_interval(minutes=_config_interval)
-            print(f"{self.bot.get_datetime_str()}: [ServerStatus] Changed loop interval to {self.StatusLoop.minutes} minutes.")
-        
         # Query API for data
         print(f"{self.bot.get_datetime_str()}: [ServerStatus] Querying stats... ", end='')
         self.server_data = await query_api()
@@ -251,6 +261,13 @@ class CogServerStatus(discord.Cog):
             await _last_message.edit(f"## Total Players: {self.total_online}", embeds=self.get_server_stat_embeds())
         else:
             await _text_channel.send(f"## Total Players: {self.total_online}", embeds=self.get_server_stat_embeds())
+        
+        ## Update interval if it differs from config & update channel description
+        _config_interval = self.bot.config['ServerStatus']['UpdateIntervalMinutes']
+        if self.StatusLoop.minutes != _config_interval:
+            await _text_channel.edit(topic=f"Live server statistics (Updated every {P.no('second', round(_config_interval*60))})")
+            self.StatusLoop.change_interval(minutes=_config_interval)
+            print(f"{self.bot.get_datetime_str()}: [ServerStatus] Changed loop interval to {self.StatusLoop.minutes} min.")
         
         print("Done.")
 

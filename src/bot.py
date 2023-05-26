@@ -36,7 +36,7 @@ class BackstabBot(discord.Bot):
         # Check that guild_id is valid
         _guild = self.get_guild(self.config['GuildID'])
         if _guild == None:
-            print(f"ERROR: Could not find valid guild with ID: {self.config['GuildID']}")
+            print(f"ERROR: [Config] Could not find valid guild with ID: {self.config['GuildID']}")
             await self.close()
         
         print(f"{self.get_datetime_str()}: [Startup] {self.user} is ready and online!")
