@@ -204,6 +204,18 @@ class CogServerStatus(discord.Cog):
         if self.StatusLoop.minutes != _config_interval:
             self.StatusLoop.change_interval(minutes=_config_interval)
             print(f"{self.bot.get_datetime_str()}: [ServerStatus] Changed loop interval to {self.StatusLoop.minutes} minutes.")
+
+        # Check that all channels in the config are valid
+        _cfg_keys = [
+            'StatusVoiceChannelID',
+            'StatsTextChannelID',
+            'AnnouncementTextChannelID'
+        ]
+        for _key in _cfg_keys:
+            _channel_id = self.bot.config['ServerStatus'][_key]
+            if self.bot.get_channel(_channel_id) == None:
+                print(f"ERROR: [Config] Could not find valid channel with ID: {_channel_id}")
+                await self.bot.close()
         
         # Query API for data
         print(f"{self.bot.get_datetime_str()}: [ServerStatus] Querying stats... ", end='')
