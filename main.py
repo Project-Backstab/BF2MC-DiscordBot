@@ -28,7 +28,7 @@ def main():
     intents.members = True
     intents.message_content = True
     # Setup activity of bot
-    activity = discord.Activity(type=discord.ActivityType.playing, name="Battlefield 2: Modern Combat Online")
+    activity = discord.Activity(type=discord.ActivityType.watching, name="0 Veterans online")
     
     # Create the bot object
     bot = BackstabBot(intents=intents, activity=activity)
@@ -64,7 +64,7 @@ def main():
         )
         _embed.set_author(
             name="Backstab", 
-            icon_url="https://cdn.discordapp.com/banners/502923049541304320/95731bc0d72d26769cb94d90b92c71c7.webp"
+            icon_url="https://raw.githubusercontent.com/lilkingjr1/backstab-discord-bot/main/assets/icon.png"
         )
         _embed.set_thumbnail(url="https://cdn.discordapp.com/icons/502923049541304320/4d8d584de5d9baec281d4861c6b11781.webp?size=4096")
         # Construct string of bot commands for display
@@ -97,7 +97,7 @@ def main():
         Reloads the bot's config file. Only admins can do this.
         """
         bot.reload_config()
-        await ctx.respond(f"Config reloaded.\n{bot.config['ServerStatus']['OnlineThreshold']}", ephemeral=True)
+        await ctx.respond(f"Config reloaded.", ephemeral=True)
         print(f"{bot.get_datetime_str()}: {ctx.author.name} reloaded the config file.")
 
     @bot.slash_command(guild_ids=[bot.config['GuildID']], name = "shutdown", description="Cleanly shuts Backstab down. Only admins can do this.")
