@@ -1,16 +1,18 @@
 """bot.py
 
 A subclass of `discord.Bot` that adds ease-of-use instance variables and functions (e.g. database object).
-Date: 05/23/2023
+Date: 05/29/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
 
+import sys
 import json
 from datetime import datetime
 
 import discord
 from discord.ext import commands
+from simplemysql import SimpleMysql
 
 
 def get_config():
@@ -26,6 +28,20 @@ class BackstabBot(discord.Bot):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.config = get_config()
+        # Database Initialization
+        try:
+            self.db = SimpleMysql(
+                host=self.config['MySQL']['Host'],
+                port=self.config['MySQL']['Port'],
+                db=self.config['MySQL']['DB_Name'],
+                user=self.config['MySQL']['User'],
+                passwd=self.config['MySQL']['Pass'],
+                autocommit=True,
+                keep_alive=True
+            )
+        except Exception as e:
+            print(f"ERROR: {e}")
+            sys.exit(3)
     
     async def on_ready(self):
         """Event: On Ready
