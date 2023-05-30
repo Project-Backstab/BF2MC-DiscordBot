@@ -381,32 +381,40 @@ class CogServerStatus(discord.Cog):
         _rank = 1
         _pages = []
         _dbEntries = self.bot.db.getAll("player_stats", ["nickname", stat], None, [stat, "DESC"], [0, 50]) # Limit to top 50 players
-        _dbEntries = self.split_list(_dbEntries, 10) # Split into pages of 10 entries each
-        for _page in _dbEntries:
+        if _dbEntries:
+            _dbEntries = self.split_list(_dbEntries, 10) # Split into pages of 10 entries each
+            for _page in _dbEntries:
+                _embed = discord.Embed(
+                    title=f":first_place:  BF2:MC Online | Top {stat.capitalize()} Leaderboard*  :first_place:",
+                    description=f"**Unofficial -- Up to {self.bot.config['ServerStatus']['UpdateIntervalMinutes']*60} sec. of match final moments may be ommited.*",
+                    color=discord.Colour.gold()
+                )
+                _nicknames = "```\n"
+                _stat = "```\n"
+                for _e in _page:
+                    _rank_str = f"#{_rank}"
+                    _nicknames += f"{_rank_str.ljust(3)} | {_e['nickname']}\n"
+                    if stat == 'score':
+                        _stat += f"{str(_e[stat]).rjust(5)} pts.\n"
+                    elif stat == 'wins':
+                        _stat += f" {P.no('game', _e[stat])} won\n"
+                    else:
+                        _stat += "\n"
+                    _rank += 1
+                _nicknames += "```"
+                _stat += "```"
+                _embed.add_field(name="Player:", value=_nicknames, inline=True)
+                _embed.add_field(name=f"{stat.capitalize()}:", value=_stat, inline=True)
+                _timestamp = datetime.utcnow().strftime("%m/%d/%y %I:%M%p UTC")
+                _embed.set_footer(text=f"{_timestamp} -- {ROOT_URL}")
+                _pages.append(Page(embeds=[_embed]))
+        else:
             _embed = discord.Embed(
                 title=f":first_place:  BF2:MC Online | Top {stat.capitalize()} Leaderboard*  :first_place:",
-                description=f"**Unofficial -- Up to {self.bot.config['ServerStatus']['UpdateIntervalMinutes']*60} sec. of match final moments may be ommited.*",
+                description="No stats yet.",
                 color=discord.Colour.gold()
             )
-            _nicknames = "```\n"
-            _stat = "```\n"
-            for _e in _page:
-                _rank_str = f"#{_rank}"
-                _nicknames += f"{_rank_str.ljust(3)} | {_e['nickname']}\n"
-                if stat == 'score':
-                    _stat += f"{str(_e[stat]).rjust(5)} pts.\n"
-                elif stat == 'wins':
-                    _stat += f" {P.no('game', _e[stat])} won\n"
-                else:
-                    _stat += "\n"
-                _rank += 1
-            _nicknames += "```"
-            _stat += "```"
-            _embed.add_field(name="Player:", value=_nicknames, inline=True)
-            _embed.add_field(name=f"{stat.capitalize()}:", value=_stat, inline=True)
-            _timestamp = datetime.utcnow().strftime("%m/%d/%y %I:%M%p UTC")
-            _embed.set_footer(text=f"{_timestamp} -- {ROOT_URL}")
-            _pages.append(Page(embeds=[_embed]))
+            _pages = [Page(embeds=[_embed])]
         return Paginator(pages=_pages, author_check=False)
     
     def get_rank_data(self, score: int):
