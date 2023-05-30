@@ -1,3 +1,4 @@
 py-cord
 requests
 inflect
+git+https://github.com/lilkingjr1/simplemysql

@@ -1,7 +1,7 @@
 """CogServerStatus.py
 
 Handles tasks related to checking server status and info.
-Date: 05/25/2023
+Date: 05/30/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -12,12 +12,17 @@ from datetime import datetime
 
 import discord
 from discord.ext import commands, tasks
+from discord.ext.pages import Paginator, Page
 import inflect
 
+ROOT_URL = "https://stats.bf2mc.net"
 API_URL = "https://stats.bf2mc.net/api/servers/"
 COUNTRY_FLAGS_URL = "https://stats.bf2mc.net/static/img/flags/<code>.png"
 GM_THUMBNAILS_URL = "https://raw.githubusercontent.com/lilkingjr1/backstab-discord-bot/main/assets/gamemode_thumbnails/<gamemode>.png"
 MAP_IMAGES_URL = "https://raw.githubusercontent.com/lilkingjr1/backstab-discord-bot/main/assets/map_images/<map_name>.png"
+STATUS_ONLINE_STR = "SERVERS: ONLINE 🟢"
+STATUS_OFFLINE_STR = "SERVERS: OFFLINE 🔴"
+STATUS_ERROR_STR = "SERVERS: UNKNOWN"
 GM_STRINGS = {
     "conquest": "Conquest",
     "capturetheflag": "Capture the Flag"
@@ -28,27 +33,45 @@ TEAM_STRINGS = {
     "AC": ":flag_ir:  Middle Eastern Coalition:",
     "EU": ":flag_eu:  European Union:"
 }
-STATUS_ONLINE_STR = "SERVERS: ONLINE 🟢"
-STATUS_OFFLINE_STR = "SERVERS: OFFLINE 🔴"
-STATUS_ERROR_STR = "SERVERS: UNKNOWN"
+RANK_DATA = {
+    (0, 25): ("Private", "https://raw.githubusercontent.com/lilkingjr1/persman/master/public/ranks/large/pv2.png"),
+    (25, 50): ("Private 1st Class", "https://raw.githubusercontent.com/lilkingjr1/persman/master/public/ranks/large/pfc.png"),
+    (50, 100): ("Corporal", "https://raw.githubusercontent.com/lilkingjr1/persman/master/public/ranks/large/cpl.png"),
+    (100, 150): ("Sergeant", "https://raw.githubusercontent.com/lilkingjr1/persman/master/public/ranks/large/sgt.png"),
+    (150, 225): ("Sergeant 1st Class", "https://raw.githubusercontent.com/lilkingjr1/persman/master/public/ranks/large/sfc.png"),
+    (225, 360): ("Master Sergeant", "https://raw.githubusercontent.com/lilkingjr1/persman/master/public/ranks/large/msg.png"),
+    (360, 550): ("Sgt. Major", "https://raw.githubusercontent.com/lilkingjr1/persman/master/public/ranks/large/sgm.png"),
+    (550, 750): ("Command Sgt. Major", "https://raw.githubusercontent.com/lilkingjr1/persman/master/public/ranks/large/csm.png"),
+    (750, 1050): ("Warrant Officer", "https://raw.githubusercontent.com/lilkingjr1/persman/master/public/ranks/large/wo1.png"),
+    (1050, 1500): ("Chief Warrant Officer", "https://raw.githubusercontent.com/lilkingjr1/persman/master/public/ranks/large/cw4.png"),
+    (1500, 2000): ("2nd Lieutenant", "https://raw.githubusercontent.com/lilkingjr1/persman/master/public/ranks/large/2lt.png"),
+    (2000, 2800): ("1st Lieutenant", "https://raw.githubusercontent.com/lilkingjr1/persman/master/public/ranks/large/1lt.png"),
+    (2800, 4000): ("Captain", "https://raw.githubusercontent.com/lilkingjr1/persman/master/public/ranks/large/cpt.png"),
+    (4000, 5800): ("Major", "https://raw.githubusercontent.com/lilkingjr1/persman/master/public/ranks/large/maj.png"),
+    (5800, 8000): ("Lieutenant Colonel", "https://raw.githubusercontent.com/lilkingjr1/persman/master/public/ranks/large/ltc.png"),
+    (8000, 12000): ("Colonel", "https://raw.githubusercontent.com/lilkingjr1/persman/master/public/ranks/large/col.png"),
+    (12000, 16000): ("Brigadier General", "https://www.military-ranks.org/images/ranks/army/large/brigadier-general.png"),
+    (16000, 22000): ("Major General", "https://www.military-ranks.org/images/ranks/army/large/major-general.png"),
+    (22000, 32000): ("Lieutenant General", "https://www.military-ranks.org/images/ranks/army/large/lieutenant-general.png"),
+    (32000, float('inf')): ("5 Star General", "https://www.military-ranks.org/images/ranks/army/large/general-of-the-army.png")
+}
 
 P = inflect.engine()
 
 
-async def query_api():
-    """Query API
+async def get_player_nicknames(ctx: discord.AutocompleteContext):
+    """Autocomplete Context: Get player nicknames
     
-    Returns JSON after querying API URL, or None if bad response.
+    Returns array of all player nicknames in the bot's database.
     """
-    # Make an HTTP GET request to the API endpoint
-    _response = requests.get(API_URL)
-
-    # Check if the request was successful (status code 200 indicates success)
-    if _response.status_code == 200:
-        # Parse the JSON response
-        return _response.json()
+    _dbEntries = ctx.bot.db.getAll(
+        "player_stats", 
+        ["nickname"]
+    )
+    if _dbEntries:
+        return [player['nickname'] for player in _dbEntries]
     else:
-        return None
+        return []
 
 
 class CogServerStatus(discord.Cog):
@@ -57,15 +80,60 @@ class CogServerStatus(discord.Cog):
         self.server_data = None
         self.last_query = None
         self.total_online = 0
+        #self.bot.db.query("DROP TABLE player_stats") # DEBUGGING
+        self.bot.db.query(
+            "CREATE TABLE IF NOT EXISTS player_stats ("
+                "id INT AUTO_INCREMENT PRIMARY KEY, "
+                "nickname TINYTEXT NOT NULL, "
+                "first_seen DATE NOT NULL, "
+                "score INT NOT NULL, "
+                "deaths INT NOT NULL, "
+                "us_games INT NOT NULL, "
+                "ch_games INT NOT NULL, "
+                "ac_games INT NOT NULL, "
+                "eu_games INT NOT NULL, "
+                "cq_games INT NOT NULL, "
+                "cf_games INT NOT NULL, "
+                "wins INT NOT NULL"
+            ")"
+        )
     
 
+    async def query_api(self):
+        """Query API
+        
+        Returns JSON after querying API URL, or None if bad response.
+        """
+        print(f"{self.bot.get_datetime_str()}: [ServerStatus] Querying API... ", end='')
+
+        # Make an HTTP GET request to the API endpoint
+        _response = requests.get(API_URL)
+
+        # Check if the request was successful (status code 200 indicates success)
+        if _response.status_code == 200:
+            print("Success.")
+            # Parse the JSON response
+            return _response.json()
+        else:
+            print("Failed.")
+            return None
+    
     def get_team_score_str(self, gamemode: str, score: int) -> str:
+        """Get Team Score String
+        
+        Returns a formatted string for the team's score given the current gamemode.
+        """
         if gamemode == "conquest":
             return f"***{P.no('ticket', score)} remaining***"
         else:
             return f"***{P.no('flag', score)} captured***"
     
     def get_player_attr_list_str(self, players, attribute: str) -> str:
+        """Get Player Attribute List String
+        
+        Returns a formatted code block string that contains a list of a given attribute for all players.
+        Accepted Attributes: name, score, deaths
+        """
         _str = "```\n"
         for _i, _p in enumerate(players):
             if attribute == 'name':
@@ -77,6 +145,10 @@ class CogServerStatus(discord.Cog):
         return _str + "```"
     
     def get_server_stat_embeds(self):
+        """Get Server Statistic Embeds
+        
+        Returns a list of Discord Embeds that each display each server's current statistics.
+        """
         _embeds = []
 
         if self.server_data != None:
@@ -142,7 +214,7 @@ class CogServerStatus(discord.Cog):
                     _embed.add_field(name="Score:", value=self.get_player_attr_list_str(_team2, 'score'), inline=True)
                     _embed.add_field(name="Deaths:", value=self.get_player_attr_list_str(_team2, 'deaths'), inline=True)
                     _embed.set_image(url=MAP_IMAGES_URL.replace("<map_name>", s['map_name']))
-                    _embed.set_footer(text=f"Data fetched at: {self.last_query.strftime('%I:%M:%S %p UTC')}")
+                    _embed.set_footer(text=f"Data fetched at: {self.last_query.strftime('%I:%M:%S %p UTC')} -- {ROOT_URL}")
                     _embeds.append(_embed)
             else:
                 _description = f"""
@@ -155,7 +227,7 @@ class CogServerStatus(discord.Cog):
                     color=discord.Colour.red()
                 )
                 _embed.set_thumbnail(url="https://upload.wikimedia.org/wikipedia/commons/thumb/8/8d/Computer_crash.svg/1200px-Computer_crash.svg.png")
-                _embed.set_footer(text=f"Data fetched at: {self.last_query.strftime('%I:%M:%S %p UTC')}")
+                _embed.set_footer(text=f"Data fetched at: {self.last_query.strftime('%I:%M:%S %p UTC')} -- {ROOT_URL}")
                 _embeds.append(_embed)
         else:
             _description = """
@@ -171,11 +243,177 @@ class CogServerStatus(discord.Cog):
                     color=discord.Colour.yellow()
                 )
             _embed.set_thumbnail(url="https://upload.wikimedia.org/wikipedia/commons/thumb/8/8d/Computer_crash.svg/1200px-Computer_crash.svg.png")
-            _embed.set_footer(text=f"Data fetched at: {self.last_query.strftime('%I:%M:%S %p UTC')}")
+            _embed.set_footer(text=f"Data fetched at: {self.last_query.strftime('%I:%M:%S %p UTC')} -- {ROOT_URL}")
             _embeds.append(_embed)
         
         return _embeds
     
+    async def record_player_stats(self, server_data):
+        """Record Player Statistics
+        
+        Additively records player statistics given a server's JSON data to the database.
+        New records are created for first-seen players.
+        """
+        print(f"{self.bot.get_datetime_str()}: [ServerStatus] Recording round stats for \"{server_data['server_name']}\"... ", end='')
+        for _p in server_data['players']:
+            _dbEntry = self.bot.db.getOne(
+                "player_stats", 
+                [
+                    "id",
+                    "score",
+                    "deaths",
+                    "us_games",
+                    "ch_games",
+                    "ac_games",
+                    "eu_games",
+                    "cq_games",
+                    "cf_games",
+                    "wins"
+                ], 
+                ("nickname=%s", [_p['name']])
+            )
+            if _dbEntry != None:
+                # Update player
+                _score = _dbEntry['score'] + _p['score']
+                _deaths = _dbEntry['deaths'] + _p['deaths']
+                _us_games = _dbEntry['us_games']
+                _ch_games = _dbEntry['ch_games']
+                _ac_games = _dbEntry['ac_games']
+                _eu_games = _dbEntry['eu_games']
+                _cq_games = _dbEntry['cq_games']
+                _cf_games = _dbEntry['cf_games']
+                _wins = _dbEntry['wins']
+                if _p['team'] == 0:
+                    _team = server_data['team1_country']
+                    if server_data['team1_score'] > server_data['team2_score']:
+                        _wins += 1
+                else:
+                    _team = server_data['team2_country']
+                    if server_data['team1_score'] < server_data['team2_score']:
+                        _wins += 1
+                if _team == "US":
+                    _us_games += 1
+                elif _team == "CH":
+                    _ch_games += 1
+                elif _team == "AC":
+                    _ac_games += 1
+                else:
+                    _eu_games += 1
+                if server_data['game_type'] == "capturetheflag":
+                    _cf_games += 1
+                else:
+                    _cq_games += 1
+                self.bot.db.update(
+                    "player_stats",
+                    {
+                        "score": _score,
+                        "deaths": _deaths,
+                        "us_games": _us_games,
+                        "ch_games": _ch_games,
+                        "ac_games": _ac_games,
+                        "eu_games": _eu_games,
+                        "cq_games": _cq_games,
+                        "cf_games": _cf_games,
+                        "wins": _wins
+                    },
+                    [f"id={_dbEntry['id']}"]
+                )
+            else:
+                # Insert new player
+                _us_games = 0
+                _ch_games = 0
+                _ac_games = 0
+                _eu_games = 0
+                _cq_games = 0
+                _cf_games = 0
+                _wins = 0
+                if _p['team'] == 0:
+                    _team = server_data['team1_country']
+                    if server_data['team1_score'] > server_data['team2_score']:
+                        _wins += 1
+                else:
+                    _team = server_data['team2_country']
+                    if server_data['team1_score'] < server_data['team2_score']:
+                        _wins += 1
+                if _team == "US":
+                    _us_games += 1
+                elif _team == "CH":
+                    _ch_games += 1
+                elif _team == "AC":
+                    _ac_games += 1
+                else:
+                    _eu_games += 1
+                if server_data['game_type'] == "capturetheflag":
+                    _cf_games += 1
+                else:
+                    _cq_games += 1
+                self.bot.db.insert(
+                    "player_stats",
+                    {
+                        "nickname": _p['name'],
+                        "first_seen": datetime.now().date(),
+                        "score": _p['score'],
+                        "deaths": _p['deaths'],
+                        "us_games": _us_games,
+                        "ch_games": _ch_games,
+                        "ac_games": _ac_games,
+                        "eu_games": _eu_games,
+                        "cq_games": _cq_games,
+                        "cf_games": _cf_games,
+                        "wins": _wins
+                    }
+                )
+        print("Done.")
+    
+    def split_list(self, lst, chunk_size):
+        """Split a list into smaller lists of equal size"""
+        if chunk_size <= 0:
+            return [lst]
+        else:
+            num_chunks = len(lst) // chunk_size
+            remainder = len(lst) % chunk_size
+            result = [lst[i*chunk_size:(i+1)*chunk_size] for i in range(num_chunks)]
+            if remainder:
+                result.append(lst[-remainder:])
+            return result
+    
+    def get_paginator_for_stat(self, stat: str) -> Paginator:
+        _rank = 1
+        _pages = []
+        _dbEntries = self.bot.db.getAll("player_stats", ["nickname", stat], None, [stat, "DESC"], [0, 50]) # Limit to top 50 players
+        _dbEntries = self.split_list(_dbEntries, 10) # Split into pages of 10 entries each
+        for _page in _dbEntries:
+            _embed = discord.Embed(
+                title=f":first_place:  BF2:MC Online | Top {stat.capitalize()} Leaderboard*  :first_place:",
+                description=f"**Unofficial -- Up to {self.bot.config['ServerStatus']['UpdateIntervalMinutes']*60} sec. of match final moments may be ommited.*",
+                color=discord.Colour.gold()
+            )
+            _nicknames = "```\n"
+            _stat = "```\n"
+            for _e in _page:
+                _rank_str = f"#{_rank}"
+                _nicknames += f"{_rank_str.ljust(3)} | {_e['nickname']}\n"
+                if stat == 'score':
+                    _stat += f"{str(_e[stat]).rjust(5)} pts.\n"
+                elif stat == 'wins':
+                    _stat += f" {P.no('game', _e[stat])} won\n"
+                else:
+                    _stat += "\n"
+                _rank += 1
+            _nicknames += "```"
+            _stat += "```"
+            _embed.add_field(name="Player:", value=_nicknames, inline=True)
+            _embed.add_field(name=f"{stat.capitalize()}:", value=_stat, inline=True)
+            _timestamp = datetime.utcnow().strftime("%m/%d/%y %I:%M%p UTC")
+            _embed.set_footer(text=f"{_timestamp} -- {ROOT_URL}")
+            _pages.append(Page(embeds=[_embed]))
+        return Paginator(pages=_pages, author_check=False)
+    
+    def get_rank_data(self, score: int):
+        for score_range, rank_data in RANK_DATA.items():
+            if score_range[0] <= score < score_range[1]:
+                return rank_data
+
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -215,12 +453,33 @@ class CogServerStatus(discord.Cog):
         
         Runs every interval period, queries API, updates status voice channel, and updates info text channel.
         """
-        # Query API for data
-        print(f"{self.bot.get_datetime_str()}: [ServerStatus] Querying stats... ", end='')
-        self.server_data = await query_api()
+        ## Query API for data
+        _new_data = await self.query_api()
         self.last_query = datetime.utcnow()
 
-        # Calculate total players online
+        ## Check each server if map changed -> record stats
+        # Only check if original data exists
+        if self.server_data != None:
+            # For all existing servers...
+            for _s_o in self.server_data['results']:
+                _server_found = False
+                # Search all new data for matching server
+                for _s_n in _new_data['results']:
+                    if _s_o['id'] == _s_n['id']:
+                        _server_found = True
+                        # Record original data if map has changed
+                        if _s_o['map_name'] != _s_n['map_name']:
+                            print(f"{self.bot.get_datetime_str()}: [ServerStatus] \"{_s_o['server_name']}\" has changed maps to {_s_n['map_name']}.")
+                            await self.record_player_stats(_s_o)
+                        break
+                # If server has gone offline, record last known data
+                if not _server_found:
+                    print(f"{self.bot.get_datetime_str()}: [ServerStatus] \"{_s_o['server_name']}\" has gone offline!")
+                    await self.record_player_stats(_s_o)
+        # Replace original data with new data
+        self.server_data = _new_data
+        
+        ## Calculate total players online
         _total_online = 0
         for _s in self.server_data['results']:
             for _ in _s['players']:
@@ -268,8 +527,6 @@ class CogServerStatus(discord.Cog):
             await _text_channel.edit(topic=f"Live server statistics (Updated every {P.no('second', round(_config_interval*60))})")
             self.StatusLoop.change_interval(minutes=_config_interval)
             print(f"{self.bot.get_datetime_str()}: [ServerStatus] Changed loop interval to {self.StatusLoop.minutes} min.")
-        
-        print("Done.")
 
 
     """Slash Command Group: /server
@@ -289,6 +546,128 @@ class CogServerStatus(discord.Cog):
             await ctx.respond(f"Number of live BF2:MC servers: {self.server_data['count']}", ephemeral=True)
         else:
             raise commands.CommandError("There was an error retrieving this data. The statistics API may be down at the moment.")
+
+
+    """Slash Command Group: /stats
+    
+    A group of commands related to checking player stats.
+    """
+    stats = discord.SlashCommandGroup("stats", "Commands related to checking unofficial player stats")
+
+    @stats.command(name = "player", description="Displays a specific player's unofficial BF2:MC Online stats")
+    @commands.cooldown(1, 180, commands.BucketType.member)
+    async def player(
+        self,
+        ctx,
+        nickname: discord.Option(
+            str, 
+            description="Nickname of player to look up", 
+            autocomplete=discord.utils.basic_autocomplete(get_player_nicknames), 
+            max_length=255, 
+            required=True
+        )
+    ):
+        """Slash Command: /stats player
+        
+        Displays a specific player's unofficial BF2:MC Online stats.
+        """
+        _dbEntry = self.bot.db.getOne(
+            "player_stats", 
+            [
+                "id",
+                "first_seen",
+                "score",
+                "deaths",
+                "us_games",
+                "ch_games",
+                "ac_games",
+                "eu_games",
+                "cq_games",
+                "cf_games",
+                "wins"
+            ], 
+            ("nickname=%s", [nickname])
+        )
+        if _dbEntry:
+            _rank_data = self.get_rank_data(_dbEntry['score'])
+            _total_games = _dbEntry['cq_games'] + _dbEntry['cf_games']
+            _losses = _total_games - _dbEntry['wins']
+            _fav_gamemode = GM_STRINGS['conquest'] # Default
+            if _dbEntry['cf_games'] > _dbEntry['cq_games']:
+                _fav_gamemode = GM_STRINGS['capturetheflag']
+            _team_games = {
+                TEAM_STRINGS['US'][:-1]: _dbEntry['us_games'],
+                TEAM_STRINGS['CH'][:-1]: _dbEntry['ch_games'],
+                TEAM_STRINGS['AC'][:-1]: _dbEntry['ac_games'],
+                TEAM_STRINGS['EU'][:-1]: _dbEntry['eu_games']
+            }
+            _most_played = None
+            _fav_team = None
+            for _name, _value in _team_games.items():
+                if _most_played is None or _value > _most_played:
+                    _most_played = _value
+                    _fav_team = _name
+            _ribbons = ""
+            if _total_games >= 50:
+                _ribbons += "• 50 Games\n"
+            if _total_games >= 250:
+                _ribbons += "• 250 Games\n"
+            if _total_games >= 500:
+                _ribbons += "• 500 Games\n"
+            if _dbEntry['wins'] >= 5:
+                _ribbons += "• 5 Victories\n"
+            if _dbEntry['wins'] >= 20:
+                _ribbons += "• 20 Victories\n"
+            if _dbEntry['wins'] >= 50:
+                _ribbons += "• 50 Victories\n"
+            _embed = discord.Embed(
+                title=f"{nickname}'s Player Stats",
+                description=f"*{_rank_data[0]}*",
+                color=discord.Colour.random(seed=_dbEntry['id'])
+            )
+            _embed.set_author(
+                name="BF2:MC Online", 
+                icon_url="https://raw.githubusercontent.com/lilkingjr1/backstab-discord-bot/main/assets/icon.png"
+            )
+            _embed.set_thumbnail(url=_rank_data[1])
+            _embed.add_field(name="Total Score:", value=_dbEntry['score'], inline=True)
+            _embed.add_field(name="Total Deaths:", value=_dbEntry['deaths'], inline=True)
+            _embed.add_field(name="Ribbons:", value=_ribbons[:-1], inline=True)
+            _embed.add_field(name="Total Games:", value=_total_games, inline=True)
+            _embed.add_field(name="Games Won:", value=_dbEntry['wins'], inline=True)
+            _embed.add_field(name="Games Lost:", value=_losses, inline=True)
+            _embed.add_field(name="Favorite Team:", value=_fav_team, inline=True)
+            _embed.add_field(name="Favorite Gamemode:", value=_fav_gamemode, inline=True)
+            _embed.set_footer(text=f"First seen online: {_dbEntry['first_seen'].strftime('%m/%d/%Y')} -- Unofficial data*")
+            await ctx.respond(embed=_embed)
+        else:
+            await ctx.respond(f':warning: We have not seen a player by the nickname of "{nickname}" play BF2:MC Online since June of 2023.', ephemeral=True)
+
+    """Slash Command Sub-Group: /stats leaderboard
+    
+    A sub-group of commands related to checking the leaderboard for various player stats.
+    """
+    leaderboard = stats.create_subgroup("leaderboard", "Commands related to checking the unofficial leaderboard for various player stats")
+
+    @leaderboard.command(name = "score", description="See an unofficial leaderboard of the top scoring players of BF2:MC Online")
+    @commands.cooldown(1, 180, commands.BucketType.channel)
+    async def score(self, ctx):
+        """Slash Command: /stats leaderboard score
+        
+        Displays an unofficial leaderboard of the top scoring players of BF2:MC Online.
+        """
+        paginator = self.get_paginator_for_stat('score')
+        await paginator.respond(ctx.interaction)
+
+    @leaderboard.command(name = "wins", description="See an unofficial leaderboard of the top winning players of BF2:MC Online")
+    @commands.cooldown(1, 180, commands.BucketType.channel)
+    async def wins(self, ctx):
+        """Slash Command: /stats leaderboard wins
+        
+        Displays an unofficial leaderboard of the top winning players of BF2:MC Online.
+        """
+        paginator = self.get_paginator_for_stat('wins')
+        await paginator.respond(ctx.interaction)
 
 
 def setup(bot):
