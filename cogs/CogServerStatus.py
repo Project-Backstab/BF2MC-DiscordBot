@@ -378,6 +378,7 @@ class CogServerStatus(discord.Cog):
             return result
     
     def get_paginator_for_stat(self, stat: str) -> Paginator:
+        """Returns a Leaderboard style Paginator for a given database stat"""
         _rank = 1
         _pages = []
         _dbEntries = self.bot.db.getAll("player_stats", ["nickname", stat], None, [stat, "DESC"], [0, 50]) # Limit to top 50 players
@@ -418,9 +419,15 @@ class CogServerStatus(discord.Cog):
         return Paginator(pages=_pages, author_check=False)
     
     def get_rank_data(self, score: int):
+        """Returns rank name and image as a tuple given a score"""
         for score_range, rank_data in RANK_DATA.items():
             if score_range[0] <= score < score_range[1]:
                 return rank_data
+    
+    def time_to_sec(self, time: str) -> int:
+        """Turns a time string into seconds as an integer"""
+        hours, minutes, seconds = time.split(':')
+        return int(hours) * 3600 + int(minutes) * 60 + int(seconds)
 
 
     @commands.Cog.listener()
@@ -465,7 +472,7 @@ class CogServerStatus(discord.Cog):
         _new_data = await self.query_api()
         self.last_query = datetime.utcnow()
 
-        ## Check each server if map changed -> record stats
+        ## Check each server if game over -> record stats
         # Only check if original data exists
         if self.server_data != None:
             # For all existing servers...
@@ -475,9 +482,11 @@ class CogServerStatus(discord.Cog):
                 for _s_n in _new_data['results']:
                     if _s_o['id'] == _s_n['id']:
                         _server_found = True
-                        # Record original data if map has changed
-                        if _s_o['map_name'] != _s_n['map_name']:
-                            print(f"{self.bot.get_datetime_str()}: [ServerStatus] \"{_s_o['server_name']}\" has changed maps to {_s_n['map_name']}.")
+                        # Record original data if new time elapsed is lower (indicating a new game)
+                        _original_time = self.time_to_sec(_s_o['time_elapsed'])
+                        _new_time = self.time_to_sec(_s_n['time_elapsed'])
+                        if _original_time > _new_time:
+                            print(f"{self.bot.get_datetime_str()}: [ServerStatus] \"{_s_o['server_name']}\" has finished a game on {_s_o['map_name']}.")
                             await self.record_player_stats(_s_o)
                         break
                 # If server has gone offline, record last known data
