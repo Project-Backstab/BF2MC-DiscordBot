@@ -482,9 +482,9 @@ class CogServerStatus(discord.Cog):
                 for _s_n in _new_data['results']:
                     if _s_o['id'] == _s_n['id']:
                         _server_found = True
-                        # Record original data if new time elapsed is lower (indicating a new game)
-                        _original_time = self.time_to_sec(_s_o['time_elapsed'])
-                        _new_time = self.time_to_sec(_s_n['time_elapsed'])
+                        # Record original data if new time limit is lower (00:00:00 == new game)
+                        _original_time = self.time_to_sec(_s_o['time_limit'])
+                        _new_time = self.time_to_sec(_s_n['time_limit'])
                         if _original_time > _new_time:
                             print(f"{self.bot.get_datetime_str()}: [ServerStatus] \"{_s_o['server_name']}\" has finished a game on {_s_o['map_name']}.")
                             await self.record_player_stats(_s_o)
