@@ -80,7 +80,6 @@ class CogServerStatus(discord.Cog):
         self.server_data = None
         self.last_query = None
         self.total_online = 0
-        print(f"{self.bot.get_datetime_str()}: [Startup] Initializing 'player_stats' database table... ", end='')
         #self.bot.db.query("DROP TABLE player_stats") # DEBUGGING
         self.bot.db.query(
             "CREATE TABLE IF NOT EXISTS player_stats ("
@@ -95,12 +94,11 @@ class CogServerStatus(discord.Cog):
                 "eu_games INT NOT NULL, "
                 "cq_games INT NOT NULL, "
                 "cf_games INT NOT NULL, "
-                "wins INT NOT NULL"
+                "wins INT NOT NULL, "
+                "losses INT NOT NULL, "
+                "top_player INT NOT NULL"
             ")"
         )
-        self.bot.db.query("ALTER TABLE player_stats ADD COLUMN IF NOT EXISTS losses INT NOT NULL DEFAULT (cq_games + cf_games - wins);")
-        self.bot.db.query("ALTER TABLE player_stats ADD COLUMN IF NOT EXISTS top_player INT NOT NULL DEFAULT (0);")
-        print("Done.")
     
 
     async def query_api(self):
