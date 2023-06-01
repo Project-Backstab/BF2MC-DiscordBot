@@ -1,7 +1,7 @@
 """CogServerStatus.py
 
 Handles tasks related to checking server status and info.
-Date: 05/30/2023
+Date: 05/31/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -80,6 +80,7 @@ class CogServerStatus(discord.Cog):
         self.server_data = None
         self.last_query = None
         self.total_online = 0
+        print(f"{self.bot.get_datetime_str()}: [Startup] Initializing 'player_stats' database table... ", end='')
         #self.bot.db.query("DROP TABLE player_stats") # DEBUGGING
         self.bot.db.query(
             "CREATE TABLE IF NOT EXISTS player_stats ("
@@ -97,6 +98,9 @@ class CogServerStatus(discord.Cog):
                 "wins INT NOT NULL"
             ")"
         )
+        self.bot.db.query("ALTER TABLE player_stats ADD COLUMN IF NOT EXISTS losses INT NOT NULL DEFAULT (cq_games + cf_games - wins);")
+        self.bot.db.query("ALTER TABLE player_stats ADD COLUMN IF NOT EXISTS top_player INT NOT NULL DEFAULT (0);")
+        print("Done.")
     
 
     async def query_api(self):
@@ -144,7 +148,7 @@ class CogServerStatus(discord.Cog):
                 _str += f"   {str(_p['deaths']).rjust(2)}\n"
         return _str + "```"
     
-    def get_server_stat_embeds(self):
+    def get_server_stat_embeds(self) -> list:
         """Get Server Statistic Embeds
         
         Returns a list of Discord Embeds that each display each server's current statistics.
@@ -248,13 +252,83 @@ class CogServerStatus(discord.Cog):
         
         return _embeds
     
+    def sum_player_stats(self, orig_stats, player_new_stats, game_data, top_player_name: str) -> dict:
+        """Sum Player Stats
+        
+        Helper function for record_player_stats().
+        Returns a dictionary of key player statistic values that is the sum of the `orig_stats`
+        dictionary and relevant values from the `player_new_stats` & `game_data` dictionaries.
+        Will start with a zeroed out dictionary if `orig_stats` is None.
+        """
+        if orig_stats == None:
+            _final_stats = {
+                "score": 0,
+                "deaths": 0,
+                "us_games": 0,
+                "ch_games": 0,
+                "ac_games": 0,
+                "eu_games": 0,
+                "cq_games": 0,
+                "cf_games": 0,
+                "wins": 0,
+                "losses": 0,
+                "top_player": 0
+            }
+        else:
+            _final_stats = orig_stats.copy()
+        # Add scores and deaths
+        _final_stats['score'] += player_new_stats['score']
+        _final_stats['deaths'] += player_new_stats['deaths']
+        # Detect player's team and if that team won or lost (draws are omitted)
+        if player_new_stats['team'] == 0:
+            _team = game_data['team1_country']
+            if game_data['team1_score'] > game_data['team2_score']:
+                _final_stats['wins'] += 1
+            elif game_data['team1_score'] < game_data['team2_score']:
+                _final_stats['losses'] += 1
+        else:
+            _team = game_data['team2_country']
+            if game_data['team1_score'] < game_data['team2_score']:
+                _final_stats['wins'] += 1
+            elif game_data['team1_score'] > game_data['team2_score']:
+                _final_stats['losses'] += 1
+        # Add team they played for
+        if _team == "US":
+            _final_stats['us_games'] += 1
+        elif _team == "CH":
+            _final_stats['ch_games'] += 1
+        elif _team == "AC":
+            _final_stats['ac_games'] += 1
+        else:
+            _final_stats['eu_games'] += 1
+        # Add gamemode they played
+        if game_data['game_type'] == "capturetheflag":
+            _final_stats['cf_games'] += 1
+        else:
+            _final_stats['cq_games'] += 1
+        # Add if they were the top player
+        if player_new_stats['name'] == top_player_name:
+            _final_stats['top_player'] += 1
+        
+        return _final_stats
+    
     async def record_player_stats(self, server_data):
         """Record Player Statistics
         
         Additively records player statistics given a server's JSON data to the database.
         New records are created for first-seen players.
         """
-        print(f"{self.bot.get_datetime_str()}: [ServerStatus] Recording round stats for \"{server_data['server_name']}\"... ", end='')
+        print(f"\tRecording round stats... ", end='')
+
+        # Find top scoring player in game
+        _top_player = None
+        for _p in server_data['players']:
+            if (_top_player == None
+                or _p['score'] > _top_player['score']
+                or (_p['score'] == _top_player['score'] and _p['deaths'] < _top_player['deaths'])):
+                _top_player = _p
+
+        # Calculate and record stats for each player in game
         for _p in server_data['players']:
             _dbEntry = self.bot.db.getOne(
                 "player_stats", 
@@ -268,104 +342,25 @@ class CogServerStatus(discord.Cog):
                     "eu_games",
                     "cq_games",
                     "cf_games",
-                    "wins"
+                    "wins",
+                    "losses",
+                    "top_player"
                 ], 
                 ("nickname=%s", [_p['name']])
             )
+            _summed_stats = self.sum_player_stats(_dbEntry, _p, server_data, _top_player['name'])
             if _dbEntry != None:
                 # Update player
-                _score = _dbEntry['score'] + _p['score']
-                _deaths = _dbEntry['deaths'] + _p['deaths']
-                _us_games = _dbEntry['us_games']
-                _ch_games = _dbEntry['ch_games']
-                _ac_games = _dbEntry['ac_games']
-                _eu_games = _dbEntry['eu_games']
-                _cq_games = _dbEntry['cq_games']
-                _cf_games = _dbEntry['cf_games']
-                _wins = _dbEntry['wins']
-                if _p['team'] == 0:
-                    _team = server_data['team1_country']
-                    if server_data['team1_score'] > server_data['team2_score']:
-                        _wins += 1
-                else:
-                    _team = server_data['team2_country']
-                    if server_data['team1_score'] < server_data['team2_score']:
-                        _wins += 1
-                if _team == "US":
-                    _us_games += 1
-                elif _team == "CH":
-                    _ch_games += 1
-                elif _team == "AC":
-                    _ac_games += 1
-                else:
-                    _eu_games += 1
-                if server_data['game_type'] == "capturetheflag":
-                    _cf_games += 1
-                else:
-                    _cq_games += 1
-                self.bot.db.update(
-                    "player_stats",
-                    {
-                        "score": _score,
-                        "deaths": _deaths,
-                        "us_games": _us_games,
-                        "ch_games": _ch_games,
-                        "ac_games": _ac_games,
-                        "eu_games": _eu_games,
-                        "cq_games": _cq_games,
-                        "cf_games": _cf_games,
-                        "wins": _wins
-                    },
-                    [f"id={_dbEntry['id']}"]
-                )
+                self.bot.db.update("player_stats", _summed_stats, [f"id={_dbEntry['id']}"])
             else:
                 # Insert new player
-                _us_games = 0
-                _ch_games = 0
-                _ac_games = 0
-                _eu_games = 0
-                _cq_games = 0
-                _cf_games = 0
-                _wins = 0
-                if _p['team'] == 0:
-                    _team = server_data['team1_country']
-                    if server_data['team1_score'] > server_data['team2_score']:
-                        _wins += 1
-                else:
-                    _team = server_data['team2_country']
-                    if server_data['team1_score'] < server_data['team2_score']:
-                        _wins += 1
-                if _team == "US":
-                    _us_games += 1
-                elif _team == "CH":
-                    _ch_games += 1
-                elif _team == "AC":
-                    _ac_games += 1
-                else:
-                    _eu_games += 1
-                if server_data['game_type'] == "capturetheflag":
-                    _cf_games += 1
-                else:
-                    _cq_games += 1
-                self.bot.db.insert(
-                    "player_stats",
-                    {
-                        "nickname": _p['name'],
-                        "first_seen": datetime.now().date(),
-                        "score": _p['score'],
-                        "deaths": _p['deaths'],
-                        "us_games": _us_games,
-                        "ch_games": _ch_games,
-                        "ac_games": _ac_games,
-                        "eu_games": _eu_games,
-                        "cq_games": _cq_games,
-                        "cf_games": _cf_games,
-                        "wins": _wins
-                    }
-                )
+                _summed_stats['nickname'] = _p['name']
+                _summed_stats['first_seen'] = datetime.now().date()
+                self.bot.db.insert("player_stats", _summed_stats)
+        
         print("Done.")
     
-    def split_list(self, lst, chunk_size):
+    def split_list(self, lst, chunk_size) -> list[list]:
         """Split a list into smaller lists of equal size"""
         if chunk_size <= 0:
             return [lst]
@@ -386,28 +381,27 @@ class CogServerStatus(discord.Cog):
             _dbEntries = self.split_list(_dbEntries, 10) # Split into pages of 10 entries each
             for _page in _dbEntries:
                 _embed = discord.Embed(
-                    title=f":first_place:  BF2:MC Online | Top {stat.capitalize()} Leaderboard*  :first_place:",
-                    description=f"**Unofficial -- Up to {self.bot.config['ServerStatus']['UpdateIntervalMinutes']*60} sec. of match final moments may be ommited.*",
+                    title=f":first_place:  BF2:MC Online | Top {stat.capitalize()} Leaderboard  :first_place:",
+                    description=f"*Unofficial\* top 50 players across all servers.*",
                     color=discord.Colour.gold()
                 )
                 _nicknames = "```\n"
-                _stat = "```\n"
+                _stats = "```\n"
                 for _e in _page:
                     _rank_str = f"#{_rank}"
                     _nicknames += f"{_rank_str.ljust(3)} | {_e['nickname']}\n"
                     if stat == 'score':
-                        _stat += f"{str(_e[stat]).rjust(5)} pts.\n"
+                        _stats += f"{str(_e[stat]).rjust(5)} pts.\n"
                     elif stat == 'wins':
-                        _stat += f" {P.no('game', _e[stat])} won\n"
+                        _stats += f" {P.no('game', _e[stat])} won\n"
                     else:
-                        _stat += "\n"
+                        _stats += "\n"
                     _rank += 1
                 _nicknames += "```"
-                _stat += "```"
+                _stats += "```"
                 _embed.add_field(name="Player:", value=_nicknames, inline=True)
-                _embed.add_field(name=f"{stat.capitalize()}:", value=_stat, inline=True)
-                _timestamp = datetime.utcnow().strftime("%m/%d/%y %I:%M%p UTC")
-                _embed.set_footer(text=f"{_timestamp} -- {ROOT_URL}")
+                _embed.add_field(name=f"{stat.capitalize()}:", value=_stats, inline=True)
+                _embed.set_footer(text=f"*Some match final moments may be ommited -- {ROOT_URL}")
                 _pages.append(Page(embeds=[_embed]))
         else:
             _embed = discord.Embed(
@@ -418,7 +412,7 @@ class CogServerStatus(discord.Cog):
             _pages = [Page(embeds=[_embed])]
         return Paginator(pages=_pages, author_check=False)
     
-    def get_rank_data(self, score: int):
+    def get_rank_data(self, score: int) -> tuple:
         """Returns rank name and image as a tuple given a score"""
         for score_range, rank_data in RANK_DATA.items():
             if score_range[0] <= score < score_range[1]:
@@ -486,7 +480,11 @@ class CogServerStatus(discord.Cog):
                         _original_time = self.time_to_sec(_s_o['time_elapsed'])
                         _new_time = self.time_to_sec(_s_n['time_elapsed'])
                         if _original_time > _new_time:
-                            print(f"{self.bot.get_datetime_str()}: [ServerStatus] \"{_s_o['server_name']}\" has finished a game on {_s_o['map_name']}.")
+                            print(f"{self.bot.get_datetime_str()}: [ServerStatus] A server has finished a game:")
+                            print(f"\tServer    : {_s_o['server_name']}")
+                            print(f"\tMap       : {_s_o['map_name']}")
+                            print(f"\tOrig. Time: {_s_o['time_elapsed']} ({_original_time} sec.)")
+                            print(f"\tNew Time  : {_s_n['time_elapsed']} ({_new_time} sec.)")
                             await self.record_player_stats(_s_o)
                         break
                 # If server has gone offline, record last known data
@@ -601,14 +599,16 @@ class CogServerStatus(discord.Cog):
                 "eu_games",
                 "cq_games",
                 "cf_games",
-                "wins"
+                "wins",
+                "losses",
+                "top_player"
             ], 
             ("nickname=%s", [nickname])
         )
+        _escaped_nickname = self.bot.escape_discord_formatting(nickname)
         if _dbEntry:
             _rank_data = self.get_rank_data(_dbEntry['score'])
             _total_games = _dbEntry['cq_games'] + _dbEntry['cf_games']
-            _losses = _total_games - _dbEntry['wins']
             _fav_gamemode = GM_STRINGS['conquest'] # Default
             if _dbEntry['cf_games'] > _dbEntry['cq_games']:
                 _fav_gamemode = GM_STRINGS['capturetheflag']
@@ -618,32 +618,31 @@ class CogServerStatus(discord.Cog):
                 TEAM_STRINGS['AC'][:-1]: _dbEntry['ac_games'],
                 TEAM_STRINGS['EU'][:-1]: _dbEntry['eu_games']
             }
-            _most_played = None
-            _fav_team = None
-            for _name, _value in _team_games.items():
-                if _most_played is None or _value > _most_played:
-                    _most_played = _value
-                    _fav_team = _name
+            _fav_team = max(_team_games, key=_team_games.get)
             _ribbons = ""
             if _total_games >= 50:
-                _ribbons += "• 50 Games\n"
+                _ribbons += ":beginner: 50 Games\n"
             if _total_games >= 250:
-                _ribbons += "• 250 Games\n"
+                _ribbons += ":fleur_de_lis: 250 Games\n"
             if _total_games >= 500:
-                _ribbons += "• 500 Games\n"
+                _ribbons += ":trident: 500 Games\n"
             if _dbEntry['wins'] >= 5:
-                _ribbons += "• 5 Victories\n"
+                _ribbons += ":third_place: 5 Victories\n"
             if _dbEntry['wins'] >= 20:
-                _ribbons += "• 20 Victories\n"
+                _ribbons += ":second_place: 20 Victories\n"
             if _dbEntry['wins'] >= 50:
-                _ribbons += "• 50 Victories\n"
+                _ribbons += ":first_place: 50 Victories\n"
+            if _dbEntry['top_player'] >= 5:
+                _ribbons += ":military_medal: 5 Top Player\n"
+            if _dbEntry['top_player'] >= 20:
+                _ribbons += ":medal: 20 Top Player\n"
             _embed = discord.Embed(
-                title=f"{nickname}'s Player Stats",
+                title=_escaped_nickname,
                 description=f"*{_rank_data[0]}*",
                 color=discord.Colour.random(seed=_dbEntry['id'])
             )
             _embed.set_author(
-                name="BF2:MC Online", 
+                name="BF2:MC Online  |  Player Stats", 
                 icon_url="https://raw.githubusercontent.com/lilkingjr1/backstab-discord-bot/main/assets/icon.png"
             )
             _embed.set_thumbnail(url=_rank_data[1])
@@ -652,13 +651,13 @@ class CogServerStatus(discord.Cog):
             _embed.add_field(name="Ribbons:", value=_ribbons[:-1], inline=True)
             _embed.add_field(name="Total Games:", value=_total_games, inline=True)
             _embed.add_field(name="Games Won:", value=_dbEntry['wins'], inline=True)
-            _embed.add_field(name="Games Lost:", value=_losses, inline=True)
+            _embed.add_field(name="Games Lost:", value=_dbEntry['losses'], inline=True)
             _embed.add_field(name="Favorite Team:", value=_fav_team, inline=True)
             _embed.add_field(name="Favorite Gamemode:", value=_fav_gamemode, inline=True)
             _embed.set_footer(text=f"First seen online: {_dbEntry['first_seen'].strftime('%m/%d/%Y')} -- Unofficial data*")
             await ctx.respond(embed=_embed)
         else:
-            await ctx.respond(f':warning: We have not seen a player by the nickname of "{nickname}" play BF2:MC Online since June of 2023.', ephemeral=True)
+            await ctx.respond(f':warning: We have not seen a player by the nickname of "{_escaped_nickname}" play BF2:MC Online since June of 2023.', ephemeral=True)
 
     """Slash Command Sub-Group: /stats leaderboard
     
