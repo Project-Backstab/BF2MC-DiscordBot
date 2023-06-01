@@ -1,7 +1,7 @@
 """bot.py
 
 A subclass of `discord.Bot` that adds ease-of-use instance variables and functions (e.g. database object).
-Date: 05/29/2023
+Date: 05/31/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -75,3 +75,12 @@ class BackstabBot(discord.Bot):
     def reload_config(self):
         """Reloads config from file and reassigns its data to the bot"""
         self.config = get_config()
+    
+    def escape_discord_formatting(self, text: str) -> str:
+        formatting_chars = ['*', '_', '`', '~', '|']
+        escaped_chars = ['\\*', '\\_', '\\`', '\\~', '\\|']
+        
+        for char, escaped_char in zip(formatting_chars, escaped_chars):
+            text = text.replace(char, escaped_char)
+        
+        return text
