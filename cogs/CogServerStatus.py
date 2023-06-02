@@ -1,7 +1,7 @@
 """CogServerStatus.py
 
 Handles tasks related to checking server status and info.
-Date: 05/31/2023
+Date: 06/01/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -250,65 +250,20 @@ class CogServerStatus(discord.Cog):
         
         return _embeds
     
-    def sum_player_stats(self, orig_stats, player_new_stats, game_data, top_player_name: str) -> dict:
-        """Sum Player Stats
+    def set_top_player(self, server_data):
+        """Set Top Player
         
-        Helper function for record_player_stats().
-        Returns a dictionary of key player statistic values that is the sum of the `orig_stats`
-        dictionary and relevant values from the `player_new_stats` & `game_data` dictionaries.
-        Will start with a zeroed out dictionary if `orig_stats` is None.
+        Attaches the nickname of the top scoring player with the least deaths in the server
+        to the given server data dictionary.
         """
-        if orig_stats == None:
-            _final_stats = {
-                "score": 0,
-                "deaths": 0,
-                "us_games": 0,
-                "ch_games": 0,
-                "ac_games": 0,
-                "eu_games": 0,
-                "cq_games": 0,
-                "cf_games": 0,
-                "wins": 0,
-                "losses": 0,
-                "top_player": 0
-            }
-        else:
-            _final_stats = orig_stats.copy()
-        # Add scores and deaths
-        _final_stats['score'] += player_new_stats['score']
-        _final_stats['deaths'] += player_new_stats['deaths']
-        # Detect player's team and if that team won or lost (draws are omitted)
-        if player_new_stats['team'] == 0:
-            _team = game_data['team1_country']
-            if game_data['team1_score'] > game_data['team2_score']:
-                _final_stats['wins'] += 1
-            elif game_data['team1_score'] < game_data['team2_score']:
-                _final_stats['losses'] += 1
-        else:
-            _team = game_data['team2_country']
-            if game_data['team1_score'] < game_data['team2_score']:
-                _final_stats['wins'] += 1
-            elif game_data['team1_score'] > game_data['team2_score']:
-                _final_stats['losses'] += 1
-        # Add team they played for
-        if _team == "US":
-            _final_stats['us_games'] += 1
-        elif _team == "CH":
-            _final_stats['ch_games'] += 1
-        elif _team == "AC":
-            _final_stats['ac_games'] += 1
-        else:
-            _final_stats['eu_games'] += 1
-        # Add gamemode they played
-        if game_data['game_type'] == "capturetheflag":
-            _final_stats['cf_games'] += 1
-        else:
-            _final_stats['cq_games'] += 1
-        # Add if they were the top player
-        if player_new_stats['name'] == top_player_name:
-            _final_stats['top_player'] += 1
+        _top_player = None
+        for _p in server_data['players']:
+            if (_top_player == None
+                or _p['score'] > _top_player['score']
+                or (_p['score'] == _top_player['score'] and _p['deaths'] < _top_player['deaths'])):
+                _top_player = _p
         
-        return _final_stats
+        server_data['top_player'] = _top_player['name']
     
     async def record_player_stats(self, server_data):
         """Record Player Statistics
@@ -316,15 +271,7 @@ class CogServerStatus(discord.Cog):
         Additively records player statistics given a server's JSON data to the database.
         New records are created for first-seen players.
         """
-        print(f"\tRecording round stats... ", end='')
-
-        # Find top scoring player in game
-        _top_player = None
-        for _p in server_data['players']:
-            if (_top_player == None
-                or _p['score'] > _top_player['score']
-                or (_p['score'] == _top_player['score'] and _p['deaths'] < _top_player['deaths'])):
-                _top_player = _p
+        print(f"Recording round stats... ", end='')
 
         # Calculate and record stats for each player in game
         for _p in server_data['players']:
@@ -346,12 +293,63 @@ class CogServerStatus(discord.Cog):
                 ], 
                 ("nickname=%s", [_p['name']])
             )
-            _summed_stats = self.sum_player_stats(_dbEntry, _p, server_data, _top_player['name'])
-            if _dbEntry != None:
-                # Update player
-                self.bot.db.update("player_stats", _summed_stats, [f"id={_dbEntry['id']}"])
+            
+            # Sum round stats with existing player stats
+            if _dbEntry == None:
+                _summed_stats = {
+                    "score": 0,
+                    "deaths": 0,
+                    "us_games": 0,
+                    "ch_games": 0,
+                    "ac_games": 0,
+                    "eu_games": 0,
+                    "cq_games": 0,
+                    "cf_games": 0,
+                    "wins": 0,
+                    "losses": 0,
+                    "top_player": 0
+                }
             else:
-                # Insert new player
+                _summed_stats = _dbEntry.copy()
+            # Add scores and deaths
+            _summed_stats['score'] += _p['score']
+            _summed_stats['deaths'] += _p['deaths']
+            # Detect player's team and if that team won or lost (draws are omitted)
+            if _p['team'] == 0:
+                _team = server_data['team1_country']
+                if server_data['team1_score'] > server_data['team2_score']:
+                    _summed_stats['wins'] += 1
+                elif server_data['team1_score'] < server_data['team2_score']:
+                    _summed_stats['losses'] += 1
+            else:
+                _team = server_data['team2_country']
+                if server_data['team1_score'] < server_data['team2_score']:
+                    _summed_stats['wins'] += 1
+                elif server_data['team1_score'] > server_data['team2_score']:
+                    _summed_stats['losses'] += 1
+            # Add team they played for
+            if _team == "US":
+                _summed_stats['us_games'] += 1
+            elif _team == "CH":
+                _summed_stats['ch_games'] += 1
+            elif _team == "AC":
+                _summed_stats['ac_games'] += 1
+            else:
+                _summed_stats['eu_games'] += 1
+            # Add gamemode they played
+            if server_data['game_type'] == "capturetheflag":
+                _summed_stats['cf_games'] += 1
+            else:
+                _summed_stats['cq_games'] += 1
+            # Add if they were the top player
+            if _p['name'] == server_data['top_player']:
+                _summed_stats['top_player'] += 1
+            
+            # Update player
+            if _dbEntry != None:
+                self.bot.db.update("player_stats", _summed_stats, [f"id={_dbEntry['id']}"])
+            # Insert new player
+            else:
                 _summed_stats['nickname'] = _p['name']
                 _summed_stats['first_seen'] = datetime.now().date()
                 self.bot.db.insert("player_stats", _summed_stats)
@@ -433,7 +431,7 @@ class CogServerStatus(discord.Cog):
         # Check that all channels in the config are valid
         _cfg_keys = [
             'StatusVoiceChannelID',
-            'StatsTextChannelID',
+            'ServerStatsTextChannelID',
             'AnnouncementTextChannelID'
         ]
         for _key in _cfg_keys:
@@ -450,7 +448,7 @@ class CogServerStatus(discord.Cog):
             print(f"{self.bot.get_datetime_str()}: [ServerStatus] StatusLoop started ({_config_interval} min. interval).")
 
         # Set stats channel description
-        _text_channel = self.bot.get_channel(self.bot.config['ServerStatus']['StatsTextChannelID'])
+        _text_channel = self.bot.get_channel(self.bot.config['ServerStatus']['ServerStatsTextChannelID'])
         await _text_channel.edit(topic=f"Live server statistics (Updated every {P.no('second', round(_config_interval*60))})")
     
 
@@ -478,15 +476,30 @@ class CogServerStatus(discord.Cog):
                         _original_time = self.time_to_sec(_s_o['time_elapsed'])
                         _new_time = self.time_to_sec(_s_n['time_elapsed'])
                         if _original_time > _new_time:
+                            self.set_top_player(_s_o)
                             print(f"{self.bot.get_datetime_str()}: [ServerStatus] A server has finished a game:")
-                            print(f"\tServer    : {_s_o['server_name']}")
-                            print(f"\tMap       : {_s_o['map_name']}")
-                            print(f"\tOrig. Time: {_s_o['time_elapsed']} ({_original_time} sec.)")
-                            print(f"\tNew Time  : {_s_n['time_elapsed']} ({_new_time} sec.)")
+                            print(f"Server     : {_s_o['server_name']}")
+                            print(f"Map        : {_s_o['map_name']}")
+                            print(f"Orig. Time : {_s_o['time_elapsed']} ({_original_time} sec.)")
+                            print(f"New Time   : {_s_n['time_elapsed']} ({_new_time} sec.)")
+                            print(f"Top Player : {_s_o['top_player']}")
+                            _text_channel = self.bot.get_channel(self.bot.config['ServerStatus']['PlayerStatsTextChannelID'])
+                            _embed = discord.Embed(
+                                title="Player Stats Saved!",
+                                description=f"*Map Played: {_s_o['map_name']}*",
+                                color=discord.Colour.green()
+                            )
+                            _embed.set_author(
+                                name=f"\"{_s_o['server_name']}\" has finished a game...", 
+                                icon_url="https://raw.githubusercontent.com/lilkingjr1/backstab-discord-bot/main/assets/icon.png"
+                            )
+                            _embed.set_thumbnail(url="https://upload.wikimedia.org/wikipedia/commons/0/04/Save-icon-floppy-disk-transparent-with-circle.png")
+                            await _text_channel.send(embed=_embed, delete_after=60)
                             await self.record_player_stats(_s_o)
                         break
                 # If server has gone offline, record last known data
                 if not _server_found:
+                    self.set_top_player(_s_o)
                     print(f"{self.bot.get_datetime_str()}: [ServerStatus] \"{_s_o['server_name']}\" has gone offline!")
                     await self.record_player_stats(_s_o)
         # Replace original data with new data
@@ -521,7 +534,7 @@ class CogServerStatus(discord.Cog):
                 await _voice_channel.edit(name=STATUS_OFFLINE_STR, reason="[BackstabBot] Server status updated.")
 
         ## Update stats channel post
-        _text_channel = self.bot.get_channel(self.bot.config['ServerStatus']['StatsTextChannelID'])
+        _text_channel = self.bot.get_channel(self.bot.config['ServerStatus']['ServerStatsTextChannelID'])
         _last_message = None
         # Fetch the message history of the channel
         async for _m in _text_channel.history(limit=3):
