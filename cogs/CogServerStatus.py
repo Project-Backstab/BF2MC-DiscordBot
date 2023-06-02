@@ -341,8 +341,8 @@ class CogServerStatus(discord.Cog):
                 _summed_stats['cf_games'] += 1
             else:
                 _summed_stats['cq_games'] += 1
-            # Add if they were the top player
-            if _p['name'] == server_data['top_player']:
+            # Add if they were the top player (and they aren't the only player)
+            if _p['name'] == server_data['top_player'] and len(server_data['players']) > 1:
                 _summed_stats['top_player'] += 1
             
             # Update player
