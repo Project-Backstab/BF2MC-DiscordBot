@@ -1,7 +1,7 @@
 """CogServerStatus.py
 
 Handles tasks related to checking server status and info.
-Date: 06/01/2023
+Date: 06/05/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -119,6 +119,7 @@ class CogServerStatus(discord.Cog):
         else:
             print("Failed.")
             return None
+        # return self.bot.config['TEST'] # Debugging
     
     def get_team_score_str(self, gamemode: str, score: int) -> str:
         """Get Team Score String
@@ -130,7 +131,7 @@ class CogServerStatus(discord.Cog):
         else:
             return f"***{P.no('flag', score)} captured***"
     
-    def get_player_attr_list_str(self, players, attribute: str) -> str:
+    def get_player_attr_list_str(self, players: list, attribute: str) -> str:
         """Get Player Attribute List String
         
         Returns a formatted code block string that contains a list of a given attribute for all players.
@@ -142,11 +143,11 @@ class CogServerStatus(discord.Cog):
                 _str += f"{_i+1}. {_p[attribute]}\n"
             elif attribute == 'score':
                 _str += f"  {str(_p[attribute]).rjust(2)} pts\n"
-            else:
+            elif attribute == 'deaths':
                 _str += f"   {str(_p['deaths']).rjust(2)}\n"
         return _str + "```"
     
-    def get_server_stat_embeds(self) -> list:
+    def get_server_stat_embeds(self) -> list[discord.Embed]:
         """Get Server Statistic Embeds
         
         Returns a list of Discord Embeds that each display each server's current statistics.
@@ -250,28 +251,27 @@ class CogServerStatus(discord.Cog):
         
         return _embeds
     
-    def set_top_player(self, server_data):
-        """Set Top Player
+    async def record_player_stats(self, server_data: dict) -> str:
+        """Record Player Statistics
         
-        Attaches the nickname of the top scoring player with the least deaths in the server
-        to the given server data dictionary.
+        Additively records player statistics to the database given a server's JSON data.
+        New records are created for first-seen players.
+        Returns nickname string of the top player.
         """
+        print(f"Recording round stats... ", end='')
+
+        # Sanitize input (because I'm paranoid)
+        if server_data == None or len(server_data['players']) < 2:
+            return
+        
+        # Calculate top player
         _top_player = None
         for _p in server_data['players']:
             if (_top_player == None
                 or _p['score'] > _top_player['score']
                 or (_p['score'] == _top_player['score'] and _p['deaths'] < _top_player['deaths'])):
                 _top_player = _p
-        
-        server_data['top_player'] = _top_player['name']
-    
-    async def record_player_stats(self, server_data):
-        """Record Player Statistics
-        
-        Additively records player statistics given a server's JSON data to the database.
-        New records are created for first-seen players.
-        """
-        print(f"Recording round stats... ", end='')
+        _top_player = _top_player['name']
 
         # Calculate and record stats for each player in game
         for _p in server_data['players']:
@@ -341,8 +341,8 @@ class CogServerStatus(discord.Cog):
                 _summed_stats['cf_games'] += 1
             else:
                 _summed_stats['cq_games'] += 1
-            # Add if they were the top player (and they aren't the only player)
-            if _p['name'] == server_data['top_player'] and len(server_data['players']) > 1:
+            # Add if they were the top player
+            if _p['name'] == _top_player:
                 _summed_stats['top_player'] += 1
             
             # Update player
@@ -355,8 +355,9 @@ class CogServerStatus(discord.Cog):
                 self.bot.db.insert("player_stats", _summed_stats)
         
         print("Done.")
+        return _top_player
     
-    def split_list(self, lst, chunk_size) -> list[list]:
+    def split_list(self, lst: list, chunk_size: int) -> list[list]:
         """Split a list into smaller lists of equal size"""
         if chunk_size <= 0:
             return [lst]
@@ -432,6 +433,7 @@ class CogServerStatus(discord.Cog):
         _cfg_keys = [
             'StatusVoiceChannelID',
             'ServerStatsTextChannelID',
+            'PlayerStatsTextChannelID',
             'AnnouncementTextChannelID'
         ]
         for _key in _cfg_keys:
@@ -446,10 +448,6 @@ class CogServerStatus(discord.Cog):
             self.StatusLoop.change_interval(minutes=_config_interval)
             self.StatusLoop.start()
             print(f"{self.bot.get_datetime_str()}: [ServerStatus] StatusLoop started ({_config_interval} min. interval).")
-
-        # Set stats channel description
-        _text_channel = self.bot.get_channel(self.bot.config['ServerStatus']['ServerStatsTextChannelID'])
-        await _text_channel.edit(topic=f"Live server statistics (Updated every {P.no('second', round(_config_interval*60))})")
     
 
     @tasks.loop(minutes=5)
@@ -473,20 +471,23 @@ class CogServerStatus(discord.Cog):
                     if _s_o['id'] == _s_n['id']:
                         _server_found = True
                         # Record original data if new time elapsed is lower (indicating a new game)
+                        # and there is more than 1 player (not real game)
                         _original_time = self.time_to_sec(_s_o['time_elapsed'])
                         _new_time = self.time_to_sec(_s_n['time_elapsed'])
-                        if _original_time > _new_time:
-                            self.set_top_player(_s_o)
+                        if _original_time > _new_time and len(_s_o['players']) > 1:
                             print(f"{self.bot.get_datetime_str()}: [ServerStatus] A server has finished a game:")
                             print(f"Server     : {_s_o['server_name']}")
                             print(f"Map        : {_s_o['map_name']}")
                             print(f"Orig. Time : {_s_o['time_elapsed']} ({_original_time} sec.)")
                             print(f"New Time   : {_s_n['time_elapsed']} ({_new_time} sec.)")
-                            print(f"Top Player : {_s_o['top_player']}")
+                            # Record stats and get top player nickname
+                            _top_player = await self.record_player_stats(_s_o)
+                            print(f"Top Player : {_top_player}")
+                            # Send temp message to player stats channel that stats were recorded
                             _text_channel = self.bot.get_channel(self.bot.config['ServerStatus']['PlayerStatsTextChannelID'])
                             _embed = discord.Embed(
                                 title="Player Stats Saved!",
-                                description=f"*Map Played: {_s_o['map_name']}*",
+                                description=f"Map Played: *{_s_o['map_name']}*\nTop Player: *{_top_player}*",
                                 color=discord.Colour.green()
                             )
                             _embed.set_author(
@@ -494,12 +495,11 @@ class CogServerStatus(discord.Cog):
                                 icon_url="https://raw.githubusercontent.com/lilkingjr1/backstab-discord-bot/main/assets/icon.png"
                             )
                             _embed.set_thumbnail(url="https://upload.wikimedia.org/wikipedia/commons/0/04/Save-icon-floppy-disk-transparent-with-circle.png")
+                            _embed.set_footer(text=f"Data captured at game time: {_s_o['time_elapsed']}")
                             await _text_channel.send(embed=_embed, delete_after=60)
-                            await self.record_player_stats(_s_o)
                         break
                 # If server has gone offline, record last known data
                 if not _server_found:
-                    self.set_top_player(_s_o)
                     print(f"{self.bot.get_datetime_str()}: [ServerStatus] \"{_s_o['server_name']}\" has gone offline!")
                     await self.record_player_stats(_s_o)
         # Replace original data with new data

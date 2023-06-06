@@ -1,7 +1,7 @@
 """bot.py
 
 A subclass of `discord.Bot` that adds ease-of-use instance variables and functions (e.g. database object).
-Date: 05/31/2023
+Date: 06/05/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -15,21 +15,38 @@ from discord.ext import commands
 from simplemysql import SimpleMysql
 
 
-def get_config():
-    """Loads config file and returns JSON data"""
-    # Load configuration file
-    with open('config.cfg') as file:
-        # Load the JSON data
-        _data = json.load(file)
-    return _data
-
-
 class BackstabBot(discord.Bot):
+    @staticmethod
+    def get_datetime_str() -> str:
+        """Return a formatted datetime string for logging"""
+        _now = datetime.now()
+        return _now.strftime("%m/%d/%Y %H:%M:%S")
+    
+    @staticmethod
+    def escape_discord_formatting(text: str) -> str:
+        """Return a string that escapes any of Discord's formatting special characters for the given string"""
+        formatting_chars = ['*', '_', '`', '~', '|']
+        escaped_chars = ['\\*', '\\_', '\\`', '\\~', '\\|']
+        for char, escaped_char in zip(formatting_chars, escaped_chars):
+            text = text.replace(char, escaped_char)
+        return text
+    
+    @staticmethod
+    def get_config() -> dict:
+        """Loads config file and returns JSON data"""
+        # Load configuration file
+        with open('config.cfg') as file:
+            # Load the JSON data
+            _data = json.load(file)
+        return _data
+    
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.config = get_config()
+        self.config = BackstabBot.get_config()
         # Database Initialization
         try:
+            print(f"{BackstabBot.get_datetime_str()}: [Startup] Logging into MySQL database... ", end='')
             self.db = SimpleMysql(
                 host=self.config['MySQL']['Host'],
                 port=self.config['MySQL']['Port'],
@@ -39,6 +56,7 @@ class BackstabBot(discord.Bot):
                 autocommit=True,
                 keep_alive=True
             )
+            print("Done.")
         except Exception as e:
             print(f"ERROR: {e}")
             sys.exit(3)
@@ -67,20 +85,6 @@ class BackstabBot(discord.Bot):
         else:
             raise error
     
-    def get_datetime_str(self) -> str:
-        """Return a formatted datetime string for logging"""
-        _now = datetime.now()
-        return _now.strftime("%m/%d/%Y %H:%M:%S")
-    
     def reload_config(self):
         """Reloads config from file and reassigns its data to the bot"""
-        self.config = get_config()
-    
-    def escape_discord_formatting(self, text: str) -> str:
-        formatting_chars = ['*', '_', '`', '~', '|']
-        escaped_chars = ['\\*', '\\_', '\\`', '\\~', '\\|']
-        
-        for char, escaped_char in zip(formatting_chars, escaped_chars):
-            text = text.replace(char, escaped_char)
-        
-        return text
+        self.config = BackstabBot.get_config()
