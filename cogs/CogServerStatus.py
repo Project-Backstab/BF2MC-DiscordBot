@@ -20,9 +20,11 @@ API_URL = "https://stats.bf2mc.net/api/servers/"
 COUNTRY_FLAGS_URL = "https://stats.bf2mc.net/static/img/flags/<code>.png"
 GM_THUMBNAILS_URL = "https://raw.githubusercontent.com/lilkingjr1/backstab-discord-bot/main/assets/gamemode_thumbnails/<gamemode>.png"
 MAP_IMAGES_URL = "https://raw.githubusercontent.com/lilkingjr1/backstab-discord-bot/main/assets/map_images/<map_name>.png"
-STATUS_ONLINE_STR = "SERVERS: ONLINE 🟢"
-STATUS_OFFLINE_STR = "SERVERS: OFFLINE 🔴"
-STATUS_ERROR_STR = "SERVERS: UNKNOWN"
+STATUS_STRINGS = {
+    "online": "SERVERS: ONLINE 🟢",
+    "offline": "SERVERS: OFFLINE 🔴",
+    "unknown": "SERVERS: UNKNOWN"
+}
 GM_STRINGS = {
     "conquest": "Conquest",
     "capturetheflag": "Capture the Flag"
@@ -80,6 +82,7 @@ class CogServerStatus(discord.Cog):
         self.server_data = None
         self.last_query = None
         self.total_online = 0
+        self.server_status = "automatic"
         #self.bot.db.query("DROP TABLE player_stats") # DEBUGGING
         self.bot.db.query(
             "CREATE TABLE IF NOT EXISTS player_stats ("
@@ -119,7 +122,7 @@ class CogServerStatus(discord.Cog):
         else:
             print("Failed.")
             return None
-        # return self.bot.config['TEST'] # Debugging
+        #return self.bot.config['TEST'] # DEBUGGING
     
     def get_team_score_str(self, gamemode: str, score: int) -> str:
         """Get Team Score String
@@ -419,6 +422,18 @@ class CogServerStatus(discord.Cog):
         """Turns a time string into seconds as an integer"""
         hours, minutes, seconds = time.split(':')
         return int(hours) * 3600 + int(minutes) * 60 + int(seconds)
+    
+    async def set_status_channel_name(self, status: str):
+        """Set Status Channel Name
+        
+        Sets the global server status for the given status string.
+        Only updates the channel if the status has changed and is valid.
+        NOTE: Discord limits channel name changes to twice every 10 min.
+        """
+        _voice_channel = self.bot.get_channel(self.bot.config['ServerStatus']['StatusVoiceChannelID'])
+        if status in STATUS_STRINGS and _voice_channel.name != STATUS_STRINGS[status]:
+            print(f"{self.bot.get_datetime_str()}: [ServerStatus] {STATUS_STRINGS[status]}")
+            await _voice_channel.edit(name=STATUS_STRINGS[status], reason="[BackstabBot] Server status updated.")
 
 
     @commands.Cog.listener()
@@ -487,7 +502,7 @@ class CogServerStatus(discord.Cog):
                             _text_channel = self.bot.get_channel(self.bot.config['ServerStatus']['PlayerStatsTextChannelID'])
                             _embed = discord.Embed(
                                 title="Player Stats Saved!",
-                                description=f"Map Played: *{_s_o['map_name']}*\nTop Player: *{_top_player}*",
+                                description=f"Map Played: *{_s_o['map_name']}*\nTop Player: *{self.bot.escape_discord_formatting(_top_player)}*",
                                 color=discord.Colour.green()
                             )
                             _embed.set_author(
@@ -495,7 +510,7 @@ class CogServerStatus(discord.Cog):
                                 icon_url="https://raw.githubusercontent.com/lilkingjr1/backstab-discord-bot/main/assets/icon.png"
                             )
                             _embed.set_thumbnail(url="https://upload.wikimedia.org/wikipedia/commons/0/04/Save-icon-floppy-disk-transparent-with-circle.png")
-                            _embed.set_footer(text=f"Data captured at game time: {_s_o['time_elapsed']}")
+                            _embed.set_footer(text=f"Data captured at final game time of {_s_o['time_elapsed']}")
                             await _text_channel.send(embed=_embed, delete_after=60)
                         break
                 # If server has gone offline, record last known data
@@ -518,20 +533,19 @@ class CogServerStatus(discord.Cog):
             await self.bot.change_presence(activity=_activity)
 
         ## Update status channel name
-        # NOTE: Discord limits channel name changes to twice every 10 min
-        _voice_channel = self.bot.get_channel(self.bot.config['ServerStatus']['StatusVoiceChannelID'])
-        if self.server_data == None:
-            if _voice_channel.name != STATUS_ERROR_STR:
-                print(f"{self.bot.get_datetime_str()}: [ServerStatus] {STATUS_ERROR_STR}")
-                await _voice_channel.edit(name=STATUS_ERROR_STR, reason="[BackstabBot] Server status updated.")
-        elif self.server_data['count'] > 0:
-            if _voice_channel.name != STATUS_ONLINE_STR:
-                print(f"{self.bot.get_datetime_str()}: [ServerStatus] {STATUS_ONLINE_STR}")
-                await _voice_channel.edit(name=STATUS_ONLINE_STR, reason="[BackstabBot] Server status updated.")
-        else:
-            if _voice_channel.name != STATUS_OFFLINE_STR:
-                print(f"{self.bot.get_datetime_str()}: [ServerStatus] {STATUS_OFFLINE_STR}")
-                await _voice_channel.edit(name=STATUS_OFFLINE_STR, reason="[BackstabBot] Server status updated.")
+        if self.server_status == "automatic":
+            if self.server_data == None:
+                await self.set_status_channel_name("unknown")
+            elif self.server_data['count'] > 0:
+                await self.set_status_channel_name("online")
+            else:
+                await self.set_status_channel_name("offline")
+        elif self.server_status == "online":
+            await self.set_status_channel_name("online")
+        elif self.server_status == "offline":
+            await self.set_status_channel_name("offline")
+        elif self.server_status == "unknown":
+            await self.set_status_channel_name("unknown")
 
         ## Update stats channel post
         _text_channel = self.bot.get_channel(self.bot.config['ServerStatus']['ServerStatsTextChannelID'])
@@ -669,6 +683,30 @@ class CogServerStatus(discord.Cog):
             await ctx.respond(embed=_embed)
         else:
             await ctx.respond(f':warning: We have not seen a player by the nickname of "{_escaped_nickname}" play BF2:MC Online since June of 2023.', ephemeral=True)
+    
+    @stats.command(name = "setstatus", description="Manually set the global server status, or set it to automatically update. Only admins can do this.")
+    @discord.default_permissions(manage_channels=True) # Only members with Manage Channels permission can use this command.
+    @commands.cooldown(2, 600, commands.BucketType.guild) # Discord limits channel name changes to twice every 10 min.
+    async def setstatus(
+        self, 
+        ctx, 
+        status: discord.Option(
+            str, 
+            description="Status to set the global server status to", 
+            choices=["automatic", "online", "offline", "unknown"], 
+            required=True
+        )
+    ):
+        """Slash Command: /stats setstatus
+        
+        Manually sets the global server status, or sets it to automatically update. Only admins can do this.
+        """
+        self.server_status = status
+        status = status.capitalize()
+        _msg = f"Global server status set to: {status}"
+        _msg += f"\n\n(Please allow up to {P.no('second', self.bot.config['ServerStatus']['UpdateIntervalMinutes']*60)} for the status to change)"
+        await ctx.respond(_msg, ephemeral=True)
+        print(f"{self.bot.get_datetime_str()}: [ServerStatus] {ctx.author.name} set the global server status to: {status}")
 
     """Slash Command Sub-Group: /stats leaderboard
     
