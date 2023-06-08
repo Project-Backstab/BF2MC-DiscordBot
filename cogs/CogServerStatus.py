@@ -489,7 +489,7 @@ class CogServerStatus(discord.Cog):
                         # and there is more than 1 player (not real game)
                         _original_time = self.time_to_sec(_s_o['time_elapsed'])
                         _new_time = self.time_to_sec(_s_n['time_elapsed'])
-                        if _original_time > _new_time and len(_s_o['players']) > 1:
+                        if _original_time >= _new_time and len(_s_o['players']) > 1:
                             print(f"{self.bot.get_datetime_str()}: [ServerStatus] A server has finished a game:")
                             print(f"Server     : {_s_o['server_name']}")
                             print(f"Map        : {_s_o['map_name']}")
