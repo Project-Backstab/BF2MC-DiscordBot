@@ -269,12 +269,12 @@ class CogPlayerStats(discord.Cog):
                         _new_time = self.time_to_sec(_s_n['time_elapsed'])
                         if (_old_time == _new_time 
                             and _s_o['id'] not in self.game_over_ids
-                            and len(_s_n['players']) > 1):
+                            and len(_s_o['players']) > 1):
                             print(f"{self.bot.get_datetime_str()}: [PlayerStats] A server has finished a game:")
                             print(f"Server     : {_s_o['server_name']}")
                             print(f"Map        : {CS.MAP_STRINGS[_s_o['map_name']]}")
-                            print(f"Orig. Time : {_s_o['time_elapsed']} ({_old_time} sec.)")
-                            print(f"New Time   : {_s_n['time_elapsed']} ({_new_time} sec.)")
+                            #print(f"Orig. Time : {_s_o['time_elapsed']} ({_old_time} sec.)") # DEBUGGING
+                            #print(f"New Time   : {_s_n['time_elapsed']} ({_new_time} sec.)")
                             # Record stats and get top player nickname
                             _top_player = await self.record_player_stats(_s_o)
                             print(f"Top Player : {_top_player}")
@@ -296,7 +296,7 @@ class CogPlayerStats(discord.Cog):
                             self.game_over_ids.append(_s_o['id'])
                         # Remove server from list if new game started
                         elif _s_o['id'] in self.game_over_ids and _old_time > _new_time:
-                            print(f"{self.bot.get_datetime_str()}: [PlayerStats] \"{_s_o['server_name']}\" has started a new game on {CS.MAP_STRINGS[_s_n['map_name']]}.")
+                            print(f"{self.bot.get_datetime_str()}: [PlayerStats] \"{_s_n['server_name']}\" has started a new game on {CS.MAP_STRINGS[_s_n['map_name']]}.")
                             self.game_over_ids.remove(_s_o['id'])
                         break
                 # If server has gone offline, record last known data

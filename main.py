@@ -13,7 +13,7 @@ from discord.ext import commands
 from src import BackstabBot
 
 def main():
-    VERSION = "2.2.0"
+    VERSION = "2.2.1"
     AUTHORS = "Red-Thirten"
     COGS_LIST = [
         "CogPlayerStats",
