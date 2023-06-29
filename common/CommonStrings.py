@@ -1,7 +1,7 @@
 """CommonStrings.py
 
 Collection of commonly used public static final strings and related functions.
-Date: 06/07/2023
+Date: 06/18/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -24,20 +24,20 @@ TEAM_STRINGS = {
     "AC": ":flag_ir:  Middle Eastern Coalition:",
     "EU": ":flag_eu:  European Union:"
 }
-MAP_STRINGS = {
-    "backstab": "Backstab",
-    "bridgetoofar": "Bridge Too Far",
-    "coldfront": "Cold Front",
-    "dammage": "Dammage",
-    "deadlypass": "Deadly Pass",
-    "harboredge": "Harbor Edge",
-    "honor": "Honor",
-    "littlebigeye": "Little Big Eye",
-    "missilecrisis": "Missile Crisis",
-    "russianborder": "Russian Border",
-    "specialop": "Special Op",
-    "theblackgold": "The Black Gold",
-    "thenest": "The Nest"
+MAP_DATA = {
+    "backstab": ("Backstab", 0),
+    "bridgetoofar": ("Bridge Too Far", 1),
+    "coldfront": ("Cold Front", 2),
+    "dammage": ("Dammage", 3),
+    "deadlypass": ("Deadly Pass", 4),
+    "harboredge": ("Harbor Edge", 5),
+    "honor": ("Honor", 6),
+    "littlebigeye": ("Little Big Eye", 7),
+    "missilecrisis": ("Missile Crisis", 8),
+    "russianborder": ("Russian Border", 9),
+    "specialop": ("Special Op", 10),
+    "theblackgold": ("The Black Gold", 11),
+    "thenest": ("The Nest", 12)
 }
 RANK_DATA = {
     (0, 25): ("Private", "https://raw.githubusercontent.com/lilkingjr1/persman/master/public/ranks/large/pv2.png"),

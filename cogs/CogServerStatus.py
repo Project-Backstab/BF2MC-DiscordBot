@@ -1,7 +1,7 @@
 """CogServerStatus.py
 
 Handles tasks related to checking server status and info.
-Date: 06/17/2023
+Date: 06/29/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -240,12 +240,12 @@ class CogServerStatus(discord.Cog):
         ## Update stats channel post
         if self.status_msg != None:
             try:
-                await self.status_msg.edit(f"## Total Players: {self.total_online}", embeds=self.get_server_stat_embeds())
+                await self.status_msg.edit(f"## Total Players Online: {self.total_online}", embeds=self.get_server_stat_embeds())
             except:
                 pass
         else:
             _text_channel = self.bot.get_channel(self.bot.config['ServerStatus']['ServerStatsTextChannelID'])
-            await _text_channel.send(f"## Total Players: {self.total_online}", embeds=self.get_server_stat_embeds())
+            await _text_channel.send(f"## Total Players Online: {self.total_online}", embeds=self.get_server_stat_embeds())
 
 
     """Slash Command Group: /server

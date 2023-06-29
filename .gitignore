@@ -3,6 +3,7 @@ config.cfg
 
 # Local dev files
 TODO.txt
+db_backups/
 
 # Python compiled bytecode and cache
 **/__pycache__/
