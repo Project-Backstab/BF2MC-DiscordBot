@@ -1,7 +1,7 @@
 """CogPlayerStats.py
 
 Handles tasks related to checking player stats and info.
-Date: 06/18/2023
+Date: 06/29/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -522,7 +522,7 @@ class CogPlayerStats(discord.Cog):
 
         if _dbEntries != None:
             _embed = discord.Embed(
-                title=f"🗺 Most Played {gamemode} Map",
+                title=f"🗺  Most Played {gamemode} Map",
                 description=f"*Currently, the most played {gamemode} map is...*",
                 color=discord.Colour.dark_blue()
             )
@@ -531,6 +531,33 @@ class CogPlayerStats(discord.Cog):
             await ctx.respond(embed=_embed)
         else:
             await ctx.respond(f":warning: No data for {gamemode} yet. Please try again later.", ephemeral=True)
+
+    """Slash Command Sub-Group: /stats total
+    
+    A sub-group of commands related to checking "total count" stats.
+    """
+    total = stats.create_subgroup("total", 'Commands related to checking "total count" related stats')
+    
+    @total.command(name = "playercount", description="Displays the count of unique nicknames with recorded stats")
+    @commands.cooldown(1, 1800, commands.BucketType.channel)
+    async def playercount(self, ctx):
+        """Slash Command: /stats total playercount
+        
+        Displays the count of unique nicknames with recorded stats.
+        """
+        _dbEntries = self.bot.db.getAll("player_stats", ["id"])
+
+        _total_players = 0
+        if _dbEntries != None:
+            _total_players = len(_dbEntries)
+        
+        _embed = discord.Embed(
+            title=f"👥︎  Total Player Count (All-Time)",
+            description=f"I have tracked **{_total_players}** unique nicknames play at least one game since June of 2023*",
+            color=discord.Colour.dark_blue()
+        )
+        _embed.set_footer(text="*Real player count may be lower due to player's having multiple accounts")
+        await ctx.respond(embed=_embed)
 
 
 def setup(bot):
