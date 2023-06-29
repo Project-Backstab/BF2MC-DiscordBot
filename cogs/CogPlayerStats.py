@@ -1,7 +1,7 @@
 """CogPlayerStats.py
 
 Handles tasks related to checking player stats and info.
-Date: 06/11/2023
+Date: 06/18/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -53,6 +53,15 @@ class CogPlayerStats(discord.Cog):
                 "wins INT NOT NULL, "
                 "losses INT NOT NULL, "
                 "top_player INT NOT NULL"
+            ")"
+        )
+        #self.bot.db.query("DROP TABLE map_stats") # DEBUGGING
+        self.bot.db.query(
+            "CREATE TABLE IF NOT EXISTS map_stats ("
+                "map_id INT PRIMARY KEY, "
+                "map_name TINYTEXT NOT NULL, "
+                "conquest INT DEFAULT 0, "
+                "capturetheflag INT DEFAULT 0"
             ")"
         )
     
@@ -179,6 +188,46 @@ class CogPlayerStats(discord.Cog):
         print("Done.")
         return _top_player
     
+    async def record_map_stats(self, server_data: dict):
+        """Record Map Statistics
+        
+        Additively records map statistics to the database given a server's JSON data.
+        New records are created for first-seen maps.
+        """
+        print(f"Recording map stats... ", end='')
+
+        # Sanitize input (because I'm paranoid)
+        if server_data == None or len(server_data['players']) < 2:
+            return None
+        
+        # Determine if map was played on Conquest of CTF
+        if server_data['game_type'] == "capturetheflag":
+            _gamemode = "capturetheflag"
+        else:
+            _gamemode = "conquest"
+        
+        # Try to get map stat from DB
+        _map_id = CS.MAP_DATA[server_data['map_name']][1]
+        _dbEntry = self.bot.db.getOne(
+            "map_stats", 
+            [_gamemode], 
+            ("map_id=%s", [_map_id])
+        )
+        
+        # Add 1 to gamemode times played
+        _times_played = 1
+        if _dbEntry != None:
+            _times_played += _dbEntry[_gamemode]
+        
+        # Insert or Update stat in DB
+        self.bot.db.insertOrUpdate(
+			"map_stats",
+			{"map_id": _map_id, "map_name": server_data['map_name'], _gamemode: _times_played},
+			"map_id"
+		)
+
+        print("Done.")
+    
     def get_paginator_for_stat(self, stat: str) -> Paginator:
         """Returns a Leaderboard style Paginator for a given database stat"""
         _rank = 1
@@ -272,17 +321,18 @@ class CogPlayerStats(discord.Cog):
                             and len(_s_o['players']) > 1):
                             print(f"{self.bot.get_datetime_str()}: [PlayerStats] A server has finished a game:")
                             print(f"Server     : {_s_o['server_name']}")
-                            print(f"Map        : {CS.MAP_STRINGS[_s_o['map_name']]}")
+                            print(f"Map        : {CS.MAP_DATA[_s_o['map_name']][0]}")
                             #print(f"Orig. Time : {_s_o['time_elapsed']} ({_old_time} sec.)") # DEBUGGING
                             #print(f"New Time   : {_s_n['time_elapsed']} ({_new_time} sec.)")
                             # Record stats and get top player nickname
                             _top_player = await self.record_player_stats(_s_o)
                             print(f"Top Player : {_top_player}")
+                            await self.record_map_stats(_s_o)
                             # Send temp message to player stats channel that stats were recorded
                             _text_channel = self.bot.get_channel(self.bot.config['PlayerStats']['PlayerStatsTextChannelID'])
                             _embed = discord.Embed(
                                 title="Player Stats Saved!",
-                                description=f"Map Played: *{CS.MAP_STRINGS[_s_o['map_name']]}*\nTop Player: *{self.bot.escape_discord_formatting(_top_player)}*",
+                                description=f"Map Played: *{CS.MAP_DATA[_s_o['map_name']][0]}*\nTop Player: *{self.bot.escape_discord_formatting(_top_player)}*",
                                 color=discord.Colour.green()
                             )
                             _embed.set_author(
@@ -296,7 +346,7 @@ class CogPlayerStats(discord.Cog):
                             self.game_over_ids.append(_s_o['id'])
                         # Remove server from list if new game started
                         elif _s_o['id'] in self.game_over_ids and _old_time > _new_time:
-                            print(f"{self.bot.get_datetime_str()}: [PlayerStats] \"{_s_n['server_name']}\" has started a new game on {CS.MAP_STRINGS[_s_n['map_name']]}.")
+                            print(f"{self.bot.get_datetime_str()}: [PlayerStats] \"{_s_n['server_name']}\" has started a new game on {CS.MAP_DATA[_s_n['map_name']][0]}.")
                             self.game_over_ids.remove(_s_o['id'])
                         break
                 # If server has gone offline, record last known data
@@ -435,6 +485,52 @@ class CogPlayerStats(discord.Cog):
         """
         paginator = self.get_paginator_for_stat('wins')
         await paginator.respond(ctx.interaction)
+
+    """Slash Command Sub-Group: /stats mostplayed
+    
+    A sub-group of commands related to checking "most played" stats.
+    """
+    mostplayed = stats.create_subgroup("mostplayed", 'Commands related to checking "most played" related stats')
+
+    @mostplayed.command(name = "map", description="See which map has been played the most for a given gamemode")
+    @commands.cooldown(1, 180, commands.BucketType.channel)
+    async def map(
+        self, 
+        ctx, 
+        gamemode: discord.Option(
+            str, 
+            description="Which gamemode to see the most played map for", 
+            choices=["Conquest", "Capture the Flag"], 
+            required=True
+        )
+    ):
+        """Slash Command: /stats mostplayed map
+        
+        Displays which map has been played the most for a given gamemode.
+        """
+        _gm_id = "conquest"
+        if gamemode == "Capture the Flag":
+            _gm_id = "capturetheflag"
+        
+        _dbEntries = self.bot.db.getAll(
+            "map_stats", 
+            ["map_name"], 
+            None, 
+            [_gm_id, "DESC"], 
+            [0, 1]
+        )
+
+        if _dbEntries != None:
+            _embed = discord.Embed(
+                title=f"🗺 Most Played {gamemode} Map",
+                description=f"*Currently, the most played {gamemode} map is...*",
+                color=discord.Colour.dark_blue()
+            )
+            _embed.set_image(url=CS.MAP_IMAGES_URL.replace("<map_name>", _dbEntries[0]['map_name']))
+            _embed.set_footer(text=f"{self.bot.config['API']['RootURL']}")
+            await ctx.respond(embed=_embed)
+        else:
+            await ctx.respond(f":warning: No data for {gamemode} yet. Please try again later.", ephemeral=True)
 
 
 def setup(bot):
