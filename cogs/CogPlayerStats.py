@@ -1,7 +1,7 @@
 """CogPlayerStats.py
 
 Handles tasks related to checking player stats and info.
-Date: 06/29/2023
+Date: 06/30/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -93,6 +93,7 @@ class CogPlayerStats(discord.Cog):
 
         # Sanitize input (because I'm paranoid)
         if server_data == None or len(server_data['players']) < 2:
+            print("Error - Invalid server data passed.")
             return None
         
         # Calculate top player
