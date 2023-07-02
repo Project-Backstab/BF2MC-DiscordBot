@@ -1,7 +1,7 @@
 """CogPlayerStats.py
 
 Handles tasks related to checking player stats and info.
-Date: 07/01/2023
+Date: 07/02/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -638,7 +638,7 @@ class CogPlayerStats(discord.Cog):
                     # Respond with buttons View
                     await ctx.respond(
                         _str1 + "\n\n" + _str2 + "\n" + _str3, 
-                        view=self.ClaimNickname(_dbEntry['id'], _escaped_nickname, ctx.author.id), 
+                        view=self.ClaimNickname(_dbEntry['id'], nickname, ctx.author), 
                         ephemeral=True
                     )
                 else:
@@ -667,20 +667,22 @@ class CogPlayerStats(discord.Cog):
         Helper class.
         Displays confirmation button that will actually perform the nickname claim in the database.
         """
-        def __init__(self, id, escaped_nickname, dis_uid, *args, **kwargs):
+        def __init__(self, id, nickname, author, *args, **kwargs):
             super().__init__(*args, **kwargs)
             self.id = id
-            self.escaped_nickname = escaped_nickname
-            self.dis_uid = dis_uid
+            self.nickname = nickname
+            self.author = author
         
         @discord.ui.button(label="Yes, I'm sure!", style=discord.ButtonStyle.danger, emoji="✅")
         async def yes_button_callback(self, button, interaction):
             interaction.client.db.update(
                 "player_stats", 
-                {"dis_uid": self.dis_uid}, 
+                {"dis_uid": self.author.id}, 
                 [f"id={self.id}"]
             )
-            _str1 = f':white_check_mark: Nickname "{self.escaped_nickname}" has successfully been claimed!'
+            print(f'{interaction.client.get_datetime_str()}: [PlayerStats] {self.author.name}#{self.author.discriminator} has claimed the nickname "{self.nickname}".')
+            _escaped_nickname = interaction.client.escape_discord_formatting(self.nickname)
+            _str1 = f':white_check_mark: Nickname "{_escaped_nickname}" has successfully been claimed!'
             _str2 = "Your Discord name will now display alongside the nickname's stats."
             _str3 = "You can also change your stats banner to a unique color with `/stats nickname color` if you wish."
             await interaction.response.edit_message(
@@ -793,6 +795,7 @@ class CogPlayerStats(discord.Cog):
                 {"dis_uid": _uid}, 
                 [f"id={_dbEntry['id']}"]
             )
+            print(f'{self.bot.get_datetime_str()}: [PlayerStats] {ctx.author.name}#{ctx.author.discriminator} has assigned the nickname of "{nickname}" to {member.display_name}.')
             await ctx.respond(f':white_check_mark: {member.name} has successfully been assigned as the owner of nickname "{_escaped_nickname}"!', ephemeral=True)
         else:
             await ctx.respond(f':warning: I have not seen a player by the nickname of "{_escaped_nickname}" play BF2:MC Online since June of 2023.', ephemeral=True)
