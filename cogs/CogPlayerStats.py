@@ -1,7 +1,7 @@
 """CogPlayerStats.py
 
 Handles tasks related to checking player stats and info.
-Date: 06/30/2023
+Date: 07/01/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -52,7 +52,11 @@ class CogPlayerStats(discord.Cog):
                 "cf_games INT NOT NULL, "
                 "wins INT NOT NULL, "
                 "losses INT NOT NULL, "
-                "top_player INT NOT NULL"
+                "top_player INT NOT NULL, "
+                "dis_uid BIGINT DEFAULT NULL, "
+                "color_r TINYINT UNSIGNED DEFAULT NULL, "
+                "color_g TINYINT UNSIGNED DEFAULT NULL, "
+                "color_b TINYINT UNSIGNED DEFAULT NULL"
             ")"
         )
         #self.bot.db.query("DROP TABLE map_stats") # DEBUGGING
@@ -403,7 +407,11 @@ class CogPlayerStats(discord.Cog):
                 "cf_games",
                 "wins",
                 "losses",
-                "top_player"
+                "top_player",
+                "dis_uid",
+                "color_r",
+                "color_g",
+                "color_b"
             ], 
             ("nickname=%s", [nickname])
         )
@@ -411,9 +419,11 @@ class CogPlayerStats(discord.Cog):
         if _dbEntry:
             _rank_data = CS.get_rank_data(_dbEntry['score'])
             _total_games = _dbEntry['cq_games'] + _dbEntry['cf_games']
+            # Determine favorite gamemode
             _fav_gamemode = CS.GM_STRINGS['conquest'] # Default
             if _dbEntry['cf_games'] > _dbEntry['cq_games']:
                 _fav_gamemode = CS.GM_STRINGS['capturetheflag']
+            # Determine favorite team
             _team_games = {
                 CS.TEAM_STRINGS['US'][:-1]: _dbEntry['us_games'],
                 CS.TEAM_STRINGS['CH'][:-1]: _dbEntry['ch_games'],
@@ -421,6 +431,7 @@ class CogPlayerStats(discord.Cog):
                 CS.TEAM_STRINGS['EU'][:-1]: _dbEntry['eu_games']
             }
             _fav_team = max(_team_games, key=_team_games.get)
+            # Determine earned ribbons
             _ribbons = ""
             if _total_games >= 50:
                 _ribbons += ":beginner: 50 Games\n"
@@ -438,14 +449,28 @@ class CogPlayerStats(discord.Cog):
                 _ribbons += ":military_medal: 5 Top Player\n"
             if _dbEntry['top_player'] >= 20:
                 _ribbons += ":medal: 20 Top Player\n"
+            # Determine embed color
+            if _dbEntry['color_r']:
+                _color = discord.Colour.from_rgb(_dbEntry['color_r'], _dbEntry['color_g'], _dbEntry['color_b'])
+            else:
+                _color = discord.Colour.random(seed=_dbEntry['id'])
+            # Set owner if applicable
+            _author_name = "BF2:MC Online  |  Player Stats"
+            _author_url = "https://raw.githubusercontent.com/lilkingjr1/backstab-discord-bot/main/assets/icon.png"
+            if _dbEntry['dis_uid']:
+                _owner = self.bot.get_user(_dbEntry['dis_uid'])
+                if _owner:
+                    _author_name = f"{_owner.display_name}'s Player Stats"
+                    _author_url = _owner.display_avatar.url
+            # Build embed
             _embed = discord.Embed(
                 title=_escaped_nickname,
                 description=f"*{_rank_data[0]}*",
-                color=discord.Colour.random(seed=_dbEntry['id'])
+                color=_color
             )
             _embed.set_author(
-                name="BF2:MC Online  |  Player Stats", 
-                icon_url="https://raw.githubusercontent.com/lilkingjr1/backstab-discord-bot/main/assets/icon.png"
+                name=_author_name, 
+                icon_url=_author_url
             )
             _embed.set_thumbnail(url=_rank_data[1])
             _embed.add_field(name="Total Score:", value=_dbEntry['score'], inline=True)
@@ -559,6 +584,218 @@ class CogPlayerStats(discord.Cog):
         )
         _embed.set_footer(text="*Real player count may be lower due to player's having multiple accounts")
         await ctx.respond(embed=_embed)
+
+    """Slash Command Sub-Group: /stats nickname
+    
+    A sub-group of commands related to claiming, customizing, and moderating a nickname.
+    """
+    nickname = stats.create_subgroup("nickname", "Commands related to claiming, customizing, and moderating a nickname")
+    
+    @nickname.command(name = "claim", description="Claim ownership of an existing nickname with stats")
+    @commands.cooldown(1, 60, commands.BucketType.member)
+    async def claim(
+        self, 
+        ctx,
+        nickname: discord.Option(
+            str, 
+            description="Nickname to claim", 
+            autocomplete=discord.utils.basic_autocomplete(get_player_nicknames), 
+            max_length=255, 
+            required=True
+        )
+    ):
+        """Slash Command: /stats nickname claim
+        
+        Allows the caller to associate their Discord account with an existing nickname
+        in the database, which allows them to 'own' that nickname as their own.
+
+        A caller can only claim a nickname if the nickname is valid and unclaimed,
+        and they haven't already claimed a nickname before.
+
+        Utilizes a `discord.ui.View` to verify that the caller actually wants to claim
+        the nickname they specified.
+        """
+        _dbEntry = self.bot.db.getOne(
+            "player_stats", 
+            ["id"], 
+            ("dis_uid=%s", [ctx.author.id])
+        )
+        # Check if author already has a claimed nickname
+        if not _dbEntry:
+            _dbEntry = self.bot.db.getOne(
+                "player_stats", 
+                ["id", "dis_uid"], 
+                ("nickname=%s", [nickname])
+            )
+            # Check if the nickname is valid
+            if _dbEntry:
+                _escaped_nickname = self.bot.escape_discord_formatting(nickname)
+                # Check if the nickname is unclaimed
+                if not _dbEntry['dis_uid']:
+                    _str1 = "You are only allowed to claim **one** nickname and this action **cannot** be undone!"
+                    _str2 = f'Are you ***absolutely*** sure you want to claim the BF2:MC Online nickname of "**{_escaped_nickname}**"?'
+                    _str3 = "*(Claiming a nickname you do not actually own will result in disciplinary action)*"
+                    # Respond with buttons View
+                    await ctx.respond(
+                        _str1 + "\n\n" + _str2 + "\n" + _str3, 
+                        view=self.ClaimNickname(_dbEntry['id'], _escaped_nickname, ctx.author.id), 
+                        ephemeral=True
+                    )
+                else:
+                    # Get owner's display name and display error
+                    _owner = self.bot.get_user(_dbEntry['dis_uid'])
+                    if _owner:
+                        _owner_name = self.bot.escape_discord_formatting(_owner.display_name)
+                    else:
+                        _owner_name = "*{User Left Server}*"
+                    _str1 = f':warning: The nickname "{_escaped_nickname}" has already been claimed by: {_owner_name}'
+                    _str2 = "If you have proof that you own this nickname, please contact an admin."
+                    await ctx.respond(_str1 + "\n\n" + _str2, ephemeral=True)
+            else:
+                _str1 = f':warning: We have not seen the nickname of "{nickname}" play BF2:MC Online since June of 2023.'
+                _str2 = "(A nickname must have been used to play at least 1 game before it can be claimed)"
+                await ctx.respond(_str1 + "\n\n" + _str2, ephemeral=True)
+        else:
+            _str1 = ":warning: You have already claimed your one and only nickname!"
+            _str2 = "Please contact an admin (with proof of ownership) if you need another nickname associated with your account."
+            _str3 = "(Note: Adding additional nicknames is an exception; not a right)"
+            await ctx.respond(_str1 + "\n\n" + _str2 + "\n" + _str3, ephemeral=True)
+    
+    class ClaimNickname(discord.ui.View):
+        """Discord UI View: Claim Nickname Confirmation
+        
+        Helper class.
+        Displays confirmation button that will actually perform the nickname claim in the database.
+        """
+        def __init__(self, id, escaped_nickname, dis_uid, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.id = id
+            self.escaped_nickname = escaped_nickname
+            self.dis_uid = dis_uid
+        
+        @discord.ui.button(label="Yes, I'm sure!", style=discord.ButtonStyle.danger, emoji="✅")
+        async def yes_button_callback(self, button, interaction):
+            interaction.client.db.update(
+                "player_stats", 
+                {"dis_uid": self.dis_uid}, 
+                [f"id={self.id}"]
+            )
+            _str1 = f':white_check_mark: Nickname "{self.escaped_nickname}" has successfully been claimed!'
+            _str2 = "Your Discord name will now display alongside the nickname's stats."
+            _str3 = "You can also change your stats banner to a unique color with `/stats nickname color` if you wish."
+            await interaction.response.edit_message(
+                content= _str1 + "\n\n" + _str2 + "\n" + _str3, 
+                view = None
+            )
+        
+        @discord.ui.button(label="No, cancel.", style=discord.ButtonStyle.primary, emoji="❌")
+        async def no_button_callback(self, button, interaction):
+            await interaction.response.edit_message(
+                content="Nickname claim has been canceled.", 
+                view = None
+            )
+    
+    @nickname.command(name = "color", description="Change the stats banner color for a nickname you own")
+    @commands.cooldown(1, 5, commands.BucketType.member)
+    async def color(
+        self, 
+        ctx, 
+        nickname: discord.Option(
+            str, 
+            description="Nickname you own", 
+            autocomplete=discord.utils.basic_autocomplete(get_player_nicknames), 
+            max_length=255, 
+            required=True
+        ), 
+        red: discord.Option(
+            int, 
+            description="Red Value | 0-255", 
+            min_value=0, 
+            max_value=255, 
+            required=True
+        ), 
+        green: discord.Option(
+            int, 
+            description="Green Value | 0-255", 
+            min_value=0, 
+            max_value=255, 
+            required=True
+        ), 
+        blue: discord.Option(
+            int, 
+            description="Blue Value | 0-255", 
+            min_value=0, 
+            max_value=255, 
+            required=True
+        )
+    ):
+        """Slash Command: /stats nickname color
+        
+        Changes the stats embed color in the database for a given nickname if the author owns said nickname.
+        """
+        _dbEntry = self.bot.db.getOne(
+            "player_stats", 
+            ["id", "dis_uid"], 
+            ("nickname=%s", [nickname])
+        )
+        _escaped_nickname = self.bot.escape_discord_formatting(nickname)
+        # Check if the author owns the nickname
+        if _dbEntry and _dbEntry['dis_uid'] == ctx.author.id:
+            self.bot.db.update(
+                "player_stats", 
+                {
+                    "color_r": red, 
+                    "color_g": green, 
+                    "color_b": blue
+                }, 
+                [f"id={_dbEntry['id']}"]
+            )
+            await ctx.respond(f'Successfully changed the stats banner color to ({red}, {green}, {blue}) for "{_escaped_nickname}"!', ephemeral=True)
+        else:
+            await ctx.respond(f':warning: You do not own the nickname "{_escaped_nickname}"\n\nPlease use `/stats nickname claim` to claim it first.', ephemeral=True)
+    
+    @nickname.command(name = "assign", description="Assigns a Discord member to a nickname. Only admins can do this.")
+    @discord.default_permissions(manage_channels=True) # Only members with Manage Channels permission can use this command.
+    async def assign(
+        self, 
+        ctx,
+        member: discord.Option(
+            discord.Member, 
+            description="Discord member (Set to BackStab bot to remove ownership)"
+        ), 
+        nickname: discord.Option(
+            str, 
+            description="BF2:MC Online nickname", 
+            autocomplete=discord.utils.basic_autocomplete(get_player_nicknames), 
+            max_length=255, 
+            required=True
+        )
+    ):
+        """Slash Command: /stats nickname assign
+        
+        Assigns a Discord member to be the owner of a nickname. Only admins can do this.
+        """
+        _dbEntry = self.bot.db.getOne(
+            "player_stats", 
+            ["id"], 
+            ("nickname=%s", [nickname])
+        )
+        _escaped_nickname = self.bot.escape_discord_formatting(nickname)
+        # Check if nickname is valid
+        if _dbEntry:
+            _uid = None
+            # Check if specified member is not bot and get UID
+            if member != self.bot.user:
+                _uid = member.id
+            # Update database
+            self.bot.db.update(
+                "player_stats", 
+                {"dis_uid": _uid}, 
+                [f"id={_dbEntry['id']}"]
+            )
+            await ctx.respond(f':white_check_mark: {member.name} has successfully been assigned as the owner of nickname "{_escaped_nickname}"!', ephemeral=True)
+        else:
+            await ctx.respond(f':warning: I have not seen a player by the nickname of "{_escaped_nickname}" play BF2:MC Online since June of 2023.', ephemeral=True)
 
 
 def setup(bot):
