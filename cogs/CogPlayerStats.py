@@ -318,12 +318,14 @@ class CogPlayerStats(discord.Cog):
                         _server_found = True
                         # Record old data if current time is equal to old time (indicating a game finished),
                         # this is the first detection (times will equal until next game),
-                        # and the server isn't empty.
+                        # the server isn't empty, and game was at least a few sec. long.
                         _old_time = self.time_to_sec(_s_o['time_elapsed'])
                         _new_time = self.time_to_sec(_s_n['time_elapsed'])
                         if (_old_time == _new_time 
                             and _s_o['id'] not in self.game_over_ids
-                            and len(_s_o['players']) > 1):
+                            and len(_s_o['players']) >= self.bot.config['PlayerStats']['MatchMinPlayers']
+                            and _old_time >= self.bot.config['PlayerStats']['MatchMinTimeSec']
+                           ):
                             self.bot.log("[PlayerStats] A server has finished a game:")
                             self.bot.log(f"Server     : {_s_o['server_name']}", time=False)
                             self.bot.log(f"Map        : {CS.MAP_DATA[_s_o['map_name']][0]}", time=False)
