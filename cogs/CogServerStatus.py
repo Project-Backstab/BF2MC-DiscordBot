@@ -1,7 +1,7 @@
 """CogServerStatus.py
 
 Handles tasks related to checking server status and info.
-Date: 06/29/2023
+Date: 07/10/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -162,7 +162,7 @@ class CogServerStatus(discord.Cog):
         """
         _voice_channel = self.bot.get_channel(self.bot.config['ServerStatus']['StatusVoiceChannelID'])
         if status in CS.STATUS_STRINGS and _voice_channel.name != CS.STATUS_STRINGS[status]:
-            print(f"{self.bot.get_datetime_str()}: [ServerStatus] {CS.STATUS_STRINGS[status]}")
+            self.bot.log(f"[ServerStatus] {CS.STATUS_STRINGS[status]}")
             await _voice_channel.edit(name=CS.STATUS_STRINGS[status], reason="[BackstabBot] Server status updated.")
 
 
@@ -172,7 +172,7 @@ class CogServerStatus(discord.Cog):
         
         Runs when the cog is successfully cached within the Discord API.
         """
-        print(f"{self.bot.get_datetime_str()}: [ServerStatus] Successfully cached!")
+        self.bot.log("[ServerStatus] Successfully cached!")
         
         # Check that all channels in the config are valid
         _cfg_sub_keys = [
@@ -194,7 +194,7 @@ class CogServerStatus(discord.Cog):
         # Start Status Loop
         if not self.StatusLoop.is_running():
             self.StatusLoop.start()
-            print(f"{self.bot.get_datetime_str()}: [ServerStatus] StatusLoop started ({UPDATE_INTERVAL} min. interval).")
+            self.bot.log(f"[ServerStatus] StatusLoop started ({UPDATE_INTERVAL} min. interval).")
             # Set channel description if it is not correct
             _text_channel = self.bot.get_channel(self.bot.config['ServerStatus']['ServerStatsTextChannelID'])
             _topic = f"Live server statistics (Updated every {self.bot.infl.no('second', round(UPDATE_INTERVAL*60))})"
@@ -288,7 +288,7 @@ class CogServerStatus(discord.Cog):
         _msg = f"Global server status set to: {status}"
         _msg += f"\n\n(Please allow up to {self.bot.infl.no('second', UPDATE_INTERVAL*60)} for the status to change)"
         await ctx.respond(_msg, ephemeral=True)
-        print(f"{self.bot.get_datetime_str()}: [PlayerStats] {ctx.author.name} set the global server status to: {status}")
+        self.bot.log(f"[PlayerStats] {ctx.author.name} set the global server status to: {status}")
 
 
 def setup(bot):

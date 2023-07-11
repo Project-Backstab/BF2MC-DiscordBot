@@ -1,7 +1,7 @@
 """main.py
 
 Main file to start Backstab
-Date: 07/02/2023
+Date: 07/10/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -13,12 +13,17 @@ from discord.ext import commands
 from src import BackstabBot
 
 def main():
-    VERSION = "2.4.1"
+    VERSION = "2.4.2"
     AUTHORS = "Red-Thirten"
     COGS_LIST = [
         "CogPlayerStats",
         "CogServerStatus"
     ]
+
+    print(
+        f"Backstab Discord Bot - v{VERSION}\n"
+        "Copyright (c) 2023 David Wolfe (Red-Thirten)"
+    )
 
     """Discord Bot -- Main
 
@@ -88,7 +93,7 @@ def main():
         """
         await ctx.send(text)
         await ctx.respond("...", ephemeral=True, delete_after=0)
-        print(f"{bot.get_datetime_str()}: {ctx.author.name} made bot say \"{text}\"")
+        bot.log(f"{ctx.author.name} made bot say \"{text}\"")
         
     @bot.slash_command(guild_ids=[bot.config['GuildID']], name = "reloadconfig", description="Reloads the bot's config file. Only admins can do this.")
     @discord.default_permissions(manage_channels=True) # Only members with Manage Channels permission can use this command.
@@ -99,7 +104,7 @@ def main():
         """
         bot.reload_config()
         await ctx.respond(f"Config reloaded.", ephemeral=True)
-        print(f"{bot.get_datetime_str()}: {ctx.author.name} reloaded the config file.")
+        bot.log(f"{ctx.author.name} reloaded the config file.")
 
     @bot.slash_command(guild_ids=[bot.config['GuildID']], name = "shutdown", description="Cleanly shuts Backstab down. Only admins can do this.")
     @discord.default_permissions(manage_channels=True) # Only members with Manage Channels permission can use this command.
@@ -108,13 +113,13 @@ def main():
         
         Cleanly shuts Backstab down. Only admins can do this.
         """
-        print(f"{bot.get_datetime_str()}: [Shutdown] Shutdown command issued by {ctx.author.name}#{ctx.author.discriminator}.")
+        bot.log(f"[Shutdown] Shutdown command issued by {ctx.author.name}#{ctx.author.discriminator}.")
         await ctx.respond("Goodbye.", ephemeral=True)
         await bot.close()
 
 
     # Attempt to start the bot
-    print(f"{bot.get_datetime_str()}: [Startup] Bot attempting to login to Discord...")
+    bot.log("[Startup] Bot attempting to login to Discord...")
     try:
         bot.run(bot.config['DiscordToken'])
     except Exception as e:
