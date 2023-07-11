@@ -1,7 +1,7 @@
 """bot.py
 
 A subclass of `discord.Bot` that adds ease-of-use instance variables and functions (e.g. database object).
-Date: 06/11/2023
+Date: 07/10/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -16,13 +16,30 @@ from discord.ext import commands
 from simplemysql import SimpleMysql
 import inflect
 
+LOG_FILE = "logfile.txt"
+
 
 class BackstabBot(discord.Bot):
     @staticmethod
-    def get_datetime_str() -> str:
-        """Return a formatted datetime string for logging"""
-        _now = datetime.now()
-        return _now.strftime("%m/%d/%Y %H:%M:%S")
+    #get_datetime_str
+    def log(msg: str, time: bool = True, file: bool = True, end: str = '\n'):
+        """Custom Logging
+
+        msg: Message to log to the console.
+        time: If a timestamp should be added to the beginning of the message.
+        file: If the message should also be logged to file.
+        end: Character to add to the end of the string.
+        """
+        if time:
+            _timestamp = datetime.now()
+            _timestamp = _timestamp.strftime("%m/%d/%Y %H:%M:%S")
+            _timestamp += ": "
+            msg = _timestamp + msg
+        msg += end
+        print(msg, end='')
+        if file:
+            with open(LOG_FILE, 'a') as _file:
+                _file.write(msg)
     
     @staticmethod
     def escape_discord_formatting(text: str) -> str:
@@ -50,9 +67,11 @@ class BackstabBot(discord.Bot):
         self.old_query_data = None
         self.last_query = None
         self.infl = inflect.engine()
+        self.log("", time=False) # Empty line to seperate runs in the log file
+        self.log("[Startup] Bot successfully instantiated.")
         # Database Initialization
         try:
-            print(f"{BackstabBot.get_datetime_str()}: [Startup] Logging into MySQL database... ", end='')
+            self.log("[Startup] Logging into MySQL database... ", end='')
             self.db = SimpleMysql(
                 host=self.config['MySQL']['Host'],
                 port=self.config['MySQL']['Port'],
@@ -62,9 +81,9 @@ class BackstabBot(discord.Bot):
                 autocommit=True,
                 keep_alive=True
             )
-            print("Done.")
+            self.log("Done.", time=False)
         except Exception as e:
-            print(f"ERROR: {e}")
+            self.log(f"ERROR: {e}", time=False)
             sys.exit(3)
     
     async def on_ready(self):
@@ -76,10 +95,10 @@ class BackstabBot(discord.Bot):
         # Check that guild_id is valid
         _guild = self.get_guild(self.config['GuildID'])
         if _guild == None:
-            print(f"ERROR: [Config] Could not find valid guild with ID: {self.config['GuildID']}")
+            self.log(f"ERROR: [Config] Could not find valid guild with ID: {self.config['GuildID']}", time=False)
             await self.close()
         
-        print(f"{self.get_datetime_str()}: [Startup] {self.user} is ready and online!")
+        self.log(f"[Startup] {self.user} is ready and online!")
     
     async def on_application_command_error(self, ctx, error):
         """Event: On Command Error
@@ -104,7 +123,7 @@ class BackstabBot(discord.Bot):
         for _sub_key in sub_keys:
             _channel_id = self.config[key][_sub_key]
             if self.get_channel(_channel_id) == None:
-                print(f"ERROR: [Config] Could not find valid channel with ID: {_channel_id}")
+                self.log(f"ERROR: [Config] Could not find valid channel with ID: {_channel_id}", time=False)
                 await self.close()
     
     async def query_api(self) -> dict:
@@ -113,7 +132,7 @@ class BackstabBot(discord.Bot):
         Returns JSON after querying API URL, or None if bad response.
         Also sets instance variables query_data and last_query.
         """
-        print(f"{self.get_datetime_str()}: [General] Querying API... ", end='')
+        self.log("[General] Querying API... ", end='', file=False)
 
         # DEBUGGING
         try:
@@ -132,13 +151,13 @@ class BackstabBot(discord.Bot):
         # Check if the request was successful (status code 200 indicates success)
         if _DEBUG:
             self.cur_query_data = _DEBUG
-            print("Success (DEBUG).")
+            self.log("Success (DEBUG).", time=False, file=False)
         elif _response.status_code == 200:
-            print("Success.")
+            self.log("Success.", time=False, file=False)
             # Parse the JSON response
             self.cur_query_data = _response.json()
         else:
-            print("Failed!")
+            self.log("Failed!", time=False, file=False)
             self.cur_query_data = None
         
         return self.cur_query_data

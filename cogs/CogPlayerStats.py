@@ -1,7 +1,7 @@
 """CogPlayerStats.py
 
 Handles tasks related to checking player stats and info.
-Date: 07/02/2023
+Date: 07/10/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -93,11 +93,11 @@ class CogPlayerStats(discord.Cog):
         New records are created for first-seen players.
         Returns nickname string of the top player.
         """
-        print(f"Recording round stats... ", end='')
+        self.bot.log(f"Recording round stats... ", end='', time=False)
 
         # Sanitize input (because I'm paranoid)
         if server_data == None or len(server_data['players']) < 2:
-            print("Error - Invalid server data passed.")
+            self.bot.log("Error - Invalid server data passed.", time=False)
             return None
         
         # Calculate top player
@@ -190,7 +190,7 @@ class CogPlayerStats(discord.Cog):
                 _summed_stats['first_seen'] = datetime.now().date()
                 self.bot.db.insert("player_stats", _summed_stats)
         
-        print("Done.")
+        self.bot.log("Done.", time=False)
         return _top_player
     
     async def record_map_stats(self, server_data: dict):
@@ -199,7 +199,7 @@ class CogPlayerStats(discord.Cog):
         Additively records map statistics to the database given a server's JSON data.
         New records are created for first-seen maps.
         """
-        print(f"Recording map stats... ", end='')
+        self.bot.log(f"Recording map stats... ", end='', time=False)
 
         # Sanitize input (because I'm paranoid)
         if server_data == None or len(server_data['players']) < 2:
@@ -231,7 +231,7 @@ class CogPlayerStats(discord.Cog):
 			"map_id"
 		)
 
-        print("Done.")
+        self.bot.log("Done.", time=False)
     
     def get_paginator_for_stat(self, stat: str) -> Paginator:
         """Returns a Leaderboard style Paginator for a given database stat"""
@@ -280,7 +280,7 @@ class CogPlayerStats(discord.Cog):
         
         Runs when the cog is successfully cached within the Discord API.
         """
-        print(f"{self.bot.get_datetime_str()}: [PlayerStats] Successfully cached!")
+        self.bot.log("[PlayerStats] Successfully cached!")
         
         # Check that all channels in the config are valid
         _cfg_sub_keys = [
@@ -293,7 +293,7 @@ class CogPlayerStats(discord.Cog):
             _config_interval = self.bot.config['PlayerStats']['QueryIntervalSeconds']
             self.StatsLoop.change_interval(seconds=_config_interval)
             self.StatsLoop.start()
-            print(f"{self.bot.get_datetime_str()}: [PlayerStats] StatsLoop started ({_config_interval} sec. interval).")
+            self.bot.log(f"[PlayerStats] StatsLoop started ({_config_interval} sec. interval).")
     
 
     @tasks.loop(seconds=10)
@@ -324,14 +324,14 @@ class CogPlayerStats(discord.Cog):
                         if (_old_time == _new_time 
                             and _s_o['id'] not in self.game_over_ids
                             and len(_s_o['players']) > 1):
-                            print(f"{self.bot.get_datetime_str()}: [PlayerStats] A server has finished a game:")
-                            print(f"Server     : {_s_o['server_name']}")
-                            print(f"Map        : {CS.MAP_DATA[_s_o['map_name']][0]}")
-                            #print(f"Orig. Time : {_s_o['time_elapsed']} ({_old_time} sec.)") # DEBUGGING
-                            #print(f"New Time   : {_s_n['time_elapsed']} ({_new_time} sec.)")
+                            self.bot.log("[PlayerStats] A server has finished a game:")
+                            self.bot.log(f"Server     : {_s_o['server_name']}", time=False)
+                            self.bot.log(f"Map        : {CS.MAP_DATA[_s_o['map_name']][0]}", time=False)
+                            #self.bot.log(f"Orig. Time : {_s_o['time_elapsed']} ({_old_time} sec.)", time=False, file=False) # DEBUGGING
+                            #self.bot.log(f"New Time   : {_s_n['time_elapsed']} ({_new_time} sec.)", time=False, file=False)
                             # Record stats and get top player nickname
                             _top_player = await self.record_player_stats(_s_o)
-                            print(f"Top Player : {_top_player}")
+                            self.bot.log(f"Top Player : {_top_player}", time=False)
                             await self.record_map_stats(_s_o)
                             # Send temp message to player stats channel that stats were recorded
                             _text_channel = self.bot.get_channel(self.bot.config['PlayerStats']['PlayerStatsTextChannelID'])
@@ -351,12 +351,12 @@ class CogPlayerStats(discord.Cog):
                             self.game_over_ids.append(_s_o['id'])
                         # Remove server from list if new game started
                         elif _s_o['id'] in self.game_over_ids and _old_time > _new_time:
-                            print(f"{self.bot.get_datetime_str()}: [PlayerStats] \"{_s_n['server_name']}\" has started a new game on {CS.MAP_DATA[_s_n['map_name']][0]}.")
+                            self.bot.log(f"[PlayerStats] \"{_s_n['server_name']}\" has started a new game on {CS.MAP_DATA[_s_n['map_name']][0]}.")
                             self.game_over_ids.remove(_s_o['id'])
                         break
                 # If server has gone offline, record last known data
                 if not _server_found:
-                    print(f"{self.bot.get_datetime_str()}: [PlayerStats] \"{_s_o['server_name']}\" has gone offline!")
+                    self.bot.log(f"[PlayerStats] \"{_s_o['server_name']}\" has gone offline!")
                     await self.record_player_stats(_s_o)
                     # Remove server from game over list (if it happens to be in there)
                     if _s_o['id'] in self.game_over_ids:
@@ -366,7 +366,7 @@ class CogPlayerStats(discord.Cog):
         _config_interval = self.bot.config['PlayerStats']['QueryIntervalSeconds']
         if self.StatsLoop.seconds != _config_interval:
             self.StatsLoop.change_interval(seconds=_config_interval)
-            print(f"{self.bot.get_datetime_str()}: [PlayerStats] Changed loop interval to {self.StatsLoop.seconds} sec.")
+            self.bot.log(f"[PlayerStats] Changed loop interval to {self.StatsLoop.seconds} sec.")
 
 
     """Slash Command Group: /stats
@@ -680,7 +680,7 @@ class CogPlayerStats(discord.Cog):
                 {"dis_uid": self.author.id}, 
                 [f"id={self.id}"]
             )
-            print(f'{interaction.client.get_datetime_str()}: [PlayerStats] {self.author.name}#{self.author.discriminator} has claimed the nickname "{self.nickname}".')
+            interaction.client.log(f'[PlayerStats] {self.author.name}#{self.author.discriminator} has claimed the nickname "{self.nickname}".')
             _escaped_nickname = interaction.client.escape_discord_formatting(self.nickname)
             _str1 = f':white_check_mark: Nickname "{_escaped_nickname}" has successfully been claimed!'
             _str2 = "Your Discord name will now display alongside the nickname's stats."
@@ -795,7 +795,7 @@ class CogPlayerStats(discord.Cog):
                 {"dis_uid": _uid}, 
                 [f"id={_dbEntry['id']}"]
             )
-            print(f'{self.bot.get_datetime_str()}: [PlayerStats] {ctx.author.name}#{ctx.author.discriminator} has assigned the nickname of "{nickname}" to {member.display_name}.')
+            self.bot.log(f'[PlayerStats] {ctx.author.name}#{ctx.author.discriminator} has assigned the nickname of "{nickname}" to {member.display_name}.')
             await ctx.respond(f':white_check_mark: {member.name} has successfully been assigned as the owner of nickname "{_escaped_nickname}"!', ephemeral=True)
         else:
             await ctx.respond(f':warning: I have not seen a player by the nickname of "{_escaped_nickname}" play BF2:MC Online since June of 2023.', ephemeral=True)
