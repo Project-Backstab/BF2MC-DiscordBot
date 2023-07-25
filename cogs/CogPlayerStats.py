@@ -584,7 +584,7 @@ class CogPlayerStats(discord.Cog):
             description=f"I have tracked **{_total_players}** unique nicknames play at least one game since June of 2023*",
             color=discord.Colour.dark_blue()
         )
-        _embed.set_footer(text="*Real player count may be lower due to player's having multiple accounts")
+        _embed.set_footer(text="*Real player count may be lower due to players having multiple accounts")
         await ctx.respond(embed=_embed)
 
     """Slash Command Sub-Group: /stats nickname
