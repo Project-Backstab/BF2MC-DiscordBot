@@ -1,7 +1,7 @@
 """bot.py
 
 A subclass of `discord.Bot` that adds ease-of-use instance variables and functions (e.g. database object).
-Date: 07/10/2023
+Date: 08/02/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -16,7 +16,7 @@ from discord.ext import commands
 from simplemysql import SimpleMysql
 import inflect
 
-LOG_FILE = "logfile.txt"
+LOG_FILE = "BackstabBot.log"
 
 
 class BackstabBot(discord.Bot):
@@ -51,6 +51,13 @@ class BackstabBot(discord.Bot):
         return text
     
     @staticmethod
+    def sec_to_mmss(seconds: int) -> str:
+        """Return a MM:SS string given seconds"""
+        minutes = seconds // 60
+        seconds_remaining = seconds % 60
+        return f"{minutes:02d}:{seconds_remaining:02d}"
+    
+    @staticmethod
     def get_config() -> dict:
         """Loads config file and returns JSON data"""
         # Load configuration file
@@ -66,6 +73,7 @@ class BackstabBot(discord.Bot):
         self.cur_query_data = None
         self.old_query_data = None
         self.last_query = None
+        self.game_over_ids = []
         self.infl = inflect.engine()
         self.log("", time=False) # Empty line to seperate runs in the log file
         self.log("[Startup] Bot successfully instantiated.")
@@ -145,7 +153,7 @@ class BackstabBot(discord.Bot):
 
         # Make an HTTP GET request to the API endpoint
         if not _DEBUG:
-            _response = requests.get(self.config['API']['ApiURL'])
+            _response = requests.get(self.config['API']['EndpointURL'])
         self.last_query = datetime.utcnow()
 
         # Check if the request was successful (status code 200 indicates success)

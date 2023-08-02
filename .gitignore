@@ -2,7 +2,6 @@
 config.cfg
 
 # Local dev files
-logfile.txt
 TODO.txt
 db_backups/
 
