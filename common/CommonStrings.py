@@ -1,7 +1,7 @@
 """CommonStrings.py
 
 Collection of commonly used public static final strings and related functions.
-Date: 06/18/2023
+Date: 08/02/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -60,6 +60,11 @@ RANK_DATA = {
     (16000, 22000): ("Major General", "https://www.military-ranks.org/images/ranks/army/large/major-general.png"),
     (22000, 32000): ("Lieutenant General", "https://www.military-ranks.org/images/ranks/army/large/lieutenant-general.png"),
     (32000, float('inf')): ("5 Star General", "https://www.military-ranks.org/images/ranks/army/large/general-of-the-army.png")
+}
+LEADERBOARD_STRINGS = {
+    "score": "Score",
+    "wins": "Wins",
+    "top_player": "MVP"
 }
 
 

@@ -1,7 +1,7 @@
 """CogServerStatus.py
 
 Handles tasks related to checking server status and info.
-Date: 07/10/2023
+Date: 08/01/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -54,87 +54,8 @@ class CogServerStatus(discord.Cog):
         
         Returns a list of Discord Embeds that each display each server's current statistics.
         """
-        _embeds = []
-
-        if self.bot.cur_query_data != None:
-            if self.bot.cur_query_data['count'] > 0:
-                for s in self.bot.cur_query_data['results']:
-                    # Get total player count
-                    _player_count = len(s['players'])
-
-                    # Setup embed color based on total player count
-                    if _player_count == 0:
-                        _color = discord.Colour.yellow()
-                    elif _player_count == s['max_players']:
-                        _color = discord.Colour.red()
-                    else:
-                        _color = discord.Colour.green()
-                    
-                    # Check if server is official
-                    if s['id'] in self.bot.config['ServerStatus']['OfficialIDs']:
-                        _description = "*Official Server*"
-                    else:
-                        _description = "*Unofficial Server*"
-                    
-                    # Parse player list into ordered teams
-                    _team1 = []
-                    _team2 = []
-                    for _p in s['players']:
-                        if _p['team'] == 0:
-                            _team1.append(_p)
-                        else:
-                            _team2.append(_p)
-                    _team1 = sorted(_team1, key=lambda x: x['score'], reverse=True)
-                    _team2 = sorted(_team2, key=lambda x: x['score'], reverse=True)
-                    
-                    # Setup Discord embed
-                    _embed = discord.Embed(
-                        title=s['server_name'],
-                        description=_description,
-                        color=_color
-                    )
-                    _embed.set_author(
-                        name="BF2:MC Server Info", 
-                        icon_url=CS.COUNTRY_FLAGS_URL.replace("<code>", s['country'].lower())
-                    )
-                    _embed.set_thumbnail(url=CS.GM_THUMBNAILS_URL.replace("<gamemode>", s['game_type']))
-                    _embed.add_field(name="Players:", value=f"{_player_count}/{s['max_players']}", inline=False)
-                    _embed.add_field(name="Gamemode:", value=CS.GM_STRINGS[s['game_type']], inline=True)
-                    _embed.add_field(name="Time Elapsed:", value=s['time_elapsed'][3:], inline=True)
-                    _embed.add_field(name="Time Limit:", value=s['time_limit'][3:], inline=True)
-                    _embed.add_field(
-                        name=CS.TEAM_STRINGS[s['team1_country']], 
-                        value=self.get_team_score_str(s['game_type'], s['team1_score']), 
-                        inline=False
-                    )
-                    _embed.add_field(name="Player:", value=self.get_player_attr_list_str(_team1, 'name'), inline=True)
-                    _embed.add_field(name="Score:", value=self.get_player_attr_list_str(_team1, 'score'), inline=True)
-                    _embed.add_field(name="Deaths:", value=self.get_player_attr_list_str(_team1, 'deaths'), inline=True)
-                    _embed.add_field(
-                        name=CS.TEAM_STRINGS[s['team2_country']], 
-                        value=self.get_team_score_str(s['game_type'], s['team2_score']), 
-                        inline=False
-                    )
-                    _embed.add_field(name="Player:", value=self.get_player_attr_list_str(_team2, 'name'), inline=True)
-                    _embed.add_field(name="Score:", value=self.get_player_attr_list_str(_team2, 'score'), inline=True)
-                    _embed.add_field(name="Deaths:", value=self.get_player_attr_list_str(_team2, 'deaths'), inline=True)
-                    _embed.set_image(url=CS.MAP_IMAGES_URL.replace("<map_name>", s['map_name']))
-                    _embed.set_footer(text=f"Data fetched at: {self.bot.last_query.strftime('%I:%M:%S %p UTC')} -- {self.bot.config['API']['RootURL']}")
-                    _embeds.append(_embed)
-            else:
-                _description = f"""
-                There are no BF2:MC servers currently online :cry:
-                Please check <#{self.bot.config['ServerStatus']['AnnouncementTextChannelID']}> for more info.
-                """
-                _embed = discord.Embed(
-                    title=":red_circle:  Servers Offline",
-                    description=_description,
-                    color=discord.Colour.red()
-                )
-                _embed.set_thumbnail(url="https://upload.wikimedia.org/wikipedia/commons/thumb/8/8d/Computer_crash.svg/1200px-Computer_crash.svg.png")
-                _embed.set_footer(text=f"Data fetched at: {self.bot.last_query.strftime('%I:%M:%S %p UTC')} -- {self.bot.config['API']['RootURL']}")
-                _embeds.append(_embed)
-        else:
+        # Check for missing query data
+        if self.bot.cur_query_data == None:
             _description = """
             *The server stats API endpoint is currently down.*
 
@@ -148,7 +69,93 @@ class CogServerStatus(discord.Cog):
                     color=discord.Colour.yellow()
                 )
             _embed.set_thumbnail(url="https://upload.wikimedia.org/wikipedia/commons/thumb/8/8d/Computer_crash.svg/1200px-Computer_crash.svg.png")
-            _embed.set_footer(text=f"Data fetched at: {self.bot.last_query.strftime('%I:%M:%S %p UTC')} -- {self.bot.config['API']['RootURL']}")
+            _embed.set_footer(text=f"Data fetched at: {self.bot.last_query.strftime('%I:%M:%S %p UTC')} -- {self.bot.config['API']['HumanURL']}")
+            return [_embed]
+        
+        # Check for no servers online
+        if self.bot.cur_query_data['serversCount'] < 1:
+            _description = f"""
+            There are no BF2:MC servers currently online :cry:
+            Please check <#{self.bot.config['ServerStatus']['AnnouncementTextChannelID']}> for more info.
+            """
+            _embed = discord.Embed(
+                title=":red_circle:  Servers Offline",
+                description=_description,
+                color=discord.Colour.red()
+            )
+            _embed.set_thumbnail(url="https://upload.wikimedia.org/wikipedia/commons/thumb/8/8d/Computer_crash.svg/1200px-Computer_crash.svg.png")
+            _embed.set_footer(text=f"Data fetched at: {self.bot.last_query.strftime('%I:%M:%S %p UTC')} -- {self.bot.config['API']['HumanURL']}")
+            return [_embed]
+
+        # Default - Build server stat embeds
+        _embeds = []
+        for s in self.bot.cur_query_data['servers']:
+            # Get total player count
+            _player_count = s['playersCount']
+
+            # Setup embed color based on total player count
+            if _player_count == 0:
+                _color = discord.Colour.yellow()
+            elif _player_count == s['maxPlayers']:
+                _color = discord.Colour.red()
+            else:
+                _color = discord.Colour.green()
+            
+            # (DEPRECIATED) Check if server is official
+            """
+            if s['id'] in self.bot.config['ServerStatus']['OfficialIDs']:
+                _description = "*Official Server*"
+            else:
+                _description = "*Unofficial Server*"
+            """
+
+            # Check match state
+            if s['id'] in self.bot.game_over_ids:
+                _description = "*Match Completed*"
+            elif _player_count < self.bot.config['PlayerStats']['MatchMinPlayers']:
+                _description = "*Waiting for Players*"
+            else:
+                _description = "*Match In-Progress*"
+            
+            # Get team players and sort by score
+            _team1 = s['teams'][0]['players']
+            _team2 = s['teams'][1]['players']
+            _team1 = sorted(_team1, key=lambda x: x['score'], reverse=True)
+            _team2 = sorted(_team2, key=lambda x: x['score'], reverse=True)
+            
+            # Setup Discord embed
+            _embed = discord.Embed(
+                title=s['serverName'],
+                description=_description,
+                color=_color
+            )
+            _embed.set_author(
+                name="BF2:MC Server Info", 
+                icon_url=CS.COUNTRY_FLAGS_URL.replace("<code>", s['country'].lower())
+            )
+            _embed.set_thumbnail(url=CS.GM_THUMBNAILS_URL.replace("<gamemode>", s['gameType']))
+            _embed.add_field(name="Players:", value=f"{_player_count}/{s['maxPlayers']}", inline=False)
+            _embed.add_field(name="Gamemode:", value=CS.GM_STRINGS[s['gameType']], inline=True)
+            _embed.add_field(name="Time Elapsed:", value=self.bot.sec_to_mmss(s['timeElapsed']), inline=True)
+            _embed.add_field(name="Time Limit:", value=self.bot.sec_to_mmss(s['timeLimit']), inline=True)
+            _embed.add_field(
+                name=CS.TEAM_STRINGS[s['teams'][0]['country']], 
+                value=self.get_team_score_str(s['gameType'], s['teams'][0]['score']), 
+                inline=False
+            )
+            _embed.add_field(name="Player:", value=self.get_player_attr_list_str(_team1, 'name'), inline=True)
+            _embed.add_field(name="Score:", value=self.get_player_attr_list_str(_team1, 'score'), inline=True)
+            _embed.add_field(name="Deaths:", value=self.get_player_attr_list_str(_team1, 'deaths'), inline=True)
+            _embed.add_field(
+                name=CS.TEAM_STRINGS[s['teams'][1]['country']],  
+                value=self.get_team_score_str(s['gameType'], s['teams'][1]['score']), 
+                inline=False
+            )
+            _embed.add_field(name="Player:", value=self.get_player_attr_list_str(_team2, 'name'), inline=True)
+            _embed.add_field(name="Score:", value=self.get_player_attr_list_str(_team2, 'score'), inline=True)
+            _embed.add_field(name="Deaths:", value=self.get_player_attr_list_str(_team2, 'deaths'), inline=True)
+            _embed.set_image(url=CS.MAP_IMAGES_URL.replace("<map_name>", s['mapName']))
+            _embed.set_footer(text=f"Data fetched at: {self.bot.last_query.strftime('%I:%M:%S %p UTC')} -- {self.bot.config['API']['HumanURL']}")
             _embeds.append(_embed)
         
         return _embeds
@@ -212,9 +219,7 @@ class CogServerStatus(discord.Cog):
         ## Calculate total players online
         _total_online = 0
         if self.bot.cur_query_data != None:
-            for _s in self.bot.cur_query_data['results']:
-                for _ in _s['players']:
-                    _total_online += 1
+            _total_online = self.bot.cur_query_data['playersCount']
         
         ## Update bot's activity if total players has changed
         if _total_online != self.total_online:
@@ -222,11 +227,11 @@ class CogServerStatus(discord.Cog):
             _activity = discord.Activity(type=discord.ActivityType.watching, name=f"{_total_online} Veterans online")
             await self.bot.change_presence(activity=_activity)
 
-        ## Update status channel name
+        ## Update server status channel name
         if self.server_status == "automatic":
             if self.bot.cur_query_data == None:
                 await self.set_status_channel_name("unknown")
-            elif self.bot.cur_query_data['count'] > 0:
+            elif self.bot.cur_query_data['serversCount'] > 0:
                 await self.set_status_channel_name("online")
             else:
                 await self.set_status_channel_name("offline")
@@ -241,8 +246,9 @@ class CogServerStatus(discord.Cog):
         if self.status_msg != None:
             try:
                 await self.status_msg.edit(f"## Total Players Online: {self.total_online}", embeds=self.get_server_stat_embeds())
-            except:
-                pass
+            except Exception as e:
+                self.bot.log("[WARNING] Unable to edit server stats message. Is the Discord API down?")
+                self.bot.log(f"Exception:\n{e}", time=False)
         else:
             _text_channel = self.bot.get_channel(self.bot.config['ServerStatus']['ServerStatsTextChannelID'])
             await _text_channel.send(f"## Total Players Online: {self.total_online}", embeds=self.get_server_stat_embeds())
@@ -262,7 +268,7 @@ class CogServerStatus(discord.Cog):
         Useful as backup if status channel has hit it's rate limit.
         """
         if self.bot.cur_query_data != None:
-            await ctx.respond(f"Number of live BF2:MC servers: {self.bot.cur_query_data['count']}", ephemeral=True)
+            await ctx.respond(f"Number of live BF2:MC servers: {self.bot.cur_query_data['serversCount']}", ephemeral=True)
         else:
             raise commands.CommandError("There was an error retrieving this data. The statistics API may be down at the moment.")
     
@@ -288,7 +294,7 @@ class CogServerStatus(discord.Cog):
         _msg = f"Global server status set to: {status}"
         _msg += f"\n\n(Please allow up to {self.bot.infl.no('second', UPDATE_INTERVAL*60)} for the status to change)"
         await ctx.respond(_msg, ephemeral=True)
-        self.bot.log(f"[PlayerStats] {ctx.author.name} set the global server status to: {status}")
+        self.bot.log(f"[ServerStats] {ctx.author.name} set the global server status to: {status}")
 
 
 def setup(bot):
