@@ -514,7 +514,7 @@ class CogPlayerStats(discord.Cog):
             _embed.add_field(name="Total Games:", value=_total_games, inline=True)
             _embed.add_field(name="Games Won:", value=_dbEntry['wins'], inline=True)
             _embed.add_field(name="Win Percentage:", value=_win_percentage, inline=True)
-            _embed.add_field(name="MVP:", value=str(_dbEntry['top_player']) + " times", inline=True)
+            _embed.add_field(name="MVP:", value=self.bot.infl.no('game', _dbEntry['top_player']), inline=True)
             _embed.add_field(name="Favorite Team:", value=_fav_team, inline=True)
             _embed.add_field(name="Favorite Gamemode:", value=_fav_gamemode, inline=True)
             _embed.set_footer(text=f"First seen online: {_dbEntry['first_seen'].strftime('%m/%d/%Y')} -- Unofficial data*")
@@ -634,7 +634,7 @@ class CogPlayerStats(discord.Cog):
     @total.command(name = "games", description="Displays the total number of games played across all servers")
     @commands.cooldown(1, 1800, commands.BucketType.channel)
     async def games(self, ctx):
-        """Slash Command: /stats total playercount
+        """Slash Command: /stats total games
         
         Displays the total number of games played across all servers.
         """
