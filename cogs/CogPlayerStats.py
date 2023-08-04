@@ -1,7 +1,7 @@
 """CogPlayerStats.py
 
 Handles tasks related to checking player stats and info.
-Date: 08/02/2023
+Date: 08/03/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -56,7 +56,8 @@ class CogPlayerStats(discord.Cog):
                 "dis_uid BIGINT DEFAULT NULL, "
                 "color_r TINYINT UNSIGNED DEFAULT NULL, "
                 "color_g TINYINT UNSIGNED DEFAULT NULL, "
-                "color_b TINYINT UNSIGNED DEFAULT NULL"
+                "color_b TINYINT UNSIGNED DEFAULT NULL, "
+                "match_history CHAR(10) DEFAULT 'NNNNNNNNNN'"
             ")"
         )
         #self.bot.db.query("DROP TABLE map_stats") # DEBUGGING
@@ -102,6 +103,13 @@ class CogPlayerStats(discord.Cog):
             self.bot.log("Failed! (Invalid server data passed)", time=False)
             return None
         
+        # Calculate winning team ID (-1 = Draw)
+        _winning_team_ID = -1
+        if server_data['teams'][0]['score'] > server_data['teams'][1]['score']:
+            _winning_team_ID = server_data['teams'][0]['id']
+        elif server_data['teams'][0]['score'] < server_data['teams'][1]['score']:
+            _winning_team_ID = server_data['teams'][1]['id']
+        
         # Calculate top player
         _top_player = None
         _all_players = server_data['teams'][0]['players'] + server_data['teams'][1]['players']
@@ -130,7 +138,8 @@ class CogPlayerStats(discord.Cog):
                         "cf_games",
                         "wins",
                         "losses",
-                        "top_player"
+                        "top_player",
+                        "match_history"
                     ], 
                     ("nickname=%s", [_p['name']])
                 )
@@ -138,6 +147,7 @@ class CogPlayerStats(discord.Cog):
                 # Sum round stats with existing player stats
                 if _dbEntry == None:
                     _summed_stats = {
+                        "pid": None,
                         "score": 0,
                         "deaths": 0,
                         "us_games": 0,
@@ -149,24 +159,22 @@ class CogPlayerStats(discord.Cog):
                         "wins": 0,
                         "losses": 0,
                         "top_player": 0,
-                        "pid": None
+                        "match_history": 'NNNNNNNNNN'
                     }
                 else:
                     _summed_stats = _dbEntry.copy()
                 # Add scores and deaths
                 _summed_stats['score'] += _p['score']
                 _summed_stats['deaths'] += _p['deaths']
-                # Detect player's team and if that team won or lost (draws are omitted)
-                if _t['id'] == 0:
-                    if _t['score'] > server_data['teams'][1]['score']:
-                        _summed_stats['wins'] += 1
-                    elif _t['score'] < server_data['teams'][1]['score']:
-                        _summed_stats['losses'] += 1
+                # Add match result & history
+                if _winning_team_ID == _t['id']:
+                    _summed_stats['wins'] += 1
+                    _summed_stats['match_history'] = _summed_stats['match_history'][1:] + 'W'
+                elif _winning_team_ID == -1:
+                    _summed_stats['match_history'] = _summed_stats['match_history'][1:] + 'D'
                 else:
-                    if server_data['teams'][0]['score'] < _t['score']:
-                        _summed_stats['wins'] += 1
-                    elif server_data['teams'][0]['score'] > _t['score']:
-                        _summed_stats['losses'] += 1
+                    _summed_stats['losses'] += 1
+                    _summed_stats['match_history'] = _summed_stats['match_history'][1:] + 'L'
                 # Add team they played for
                 _team = _t['country']
                 if _team == "US":
@@ -431,7 +439,8 @@ class CogPlayerStats(discord.Cog):
                 "dis_uid",
                 "color_r",
                 "color_g",
-                "color_b"
+                "color_b",
+                "match_history"
             ], 
             ("nickname=%s", [nickname])
         )
@@ -483,6 +492,19 @@ class CogPlayerStats(discord.Cog):
             _win_percentage = (_dbEntry['wins'] / _total_games) * 100
             _win_percentage = round(_win_percentage, 2)
             _win_percentage = str(_win_percentage) + "%"
+            # Build match history string
+            _match_history = ""
+            for _c in _dbEntry['match_history']:
+                if _c == 'W':
+                    _match_history += self.bot.config['Emoji']['MatchHistory']['Win'] + " "
+                elif _c == 'L':
+                    _match_history += self.bot.config['Emoji']['MatchHistory']['Loss'] + " "
+                elif _c == 'D':
+                    _match_history += self.bot.config['Emoji']['MatchHistory']['Draw'] + " "
+            if _match_history != "":
+                _match_history = "Past ⏪ " + _match_history + "⏪ Recent"
+            else:
+                _match_history = "None"
             # Determine embed color
             if _dbEntry['color_r']:
                 _color = discord.Colour.from_rgb(_dbEntry['color_r'], _dbEntry['color_g'], _dbEntry['color_b'])
@@ -517,6 +539,7 @@ class CogPlayerStats(discord.Cog):
             _embed.add_field(name="MVP:", value=self.bot.infl.no('game', _dbEntry['top_player']), inline=True)
             _embed.add_field(name="Favorite Team:", value=_fav_team, inline=True)
             _embed.add_field(name="Favorite Gamemode:", value=_fav_gamemode, inline=True)
+            _embed.add_field(name="Match Result History:", value=_match_history, inline=False)
             _embed.set_footer(text=f"First seen online: {_dbEntry['first_seen'].strftime('%m/%d/%Y')} -- Unofficial data*")
             await ctx.respond(embed=_embed)
         else:
