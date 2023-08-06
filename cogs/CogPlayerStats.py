@@ -1,7 +1,7 @@
 """CogPlayerStats.py
 
 Handles tasks related to checking player stats and info.
-Date: 08/03/2023
+Date: 08/06/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -621,7 +621,7 @@ class CogPlayerStats(discord.Cog):
                 description=f"*Currently, the most played {gamemode} map is...*",
                 color=discord.Colour.dark_blue()
             )
-            _embed.set_image(url=CS.MAP_IMAGES_URL.replace("<map_name>", _dbEntries[0]['mapName']))
+            _embed.set_image(url=CS.MAP_IMAGES_URL.replace("<map_name>", _dbEntries[0]['map_name']))
             _embed.set_footer(text=f"{self.bot.config['API']['HumanURL']}")
             await ctx.respond(embed=_embed)
         else:
