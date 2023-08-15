@@ -1,7 +1,7 @@
 """CogServerStatus.py
 
 Handles tasks related to checking server status and info.
-Date: 08/01/2023
+Date: 08/14/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -273,8 +273,6 @@ class CogServerStatus(discord.Cog):
             raise commands.CommandError("There was an error retrieving this data. The statistics API may be down at the moment.")
     
     @server.command(name = "setstatus", description="Manually set the global server status, or set it to automatically update. Only admins can do this.")
-    @discord.default_permissions(manage_channels=True) # Only members with Manage Channels permission can use this command.
-    @commands.cooldown(2, 600, commands.BucketType.guild) # Discord limits channel name changes to twice every 10 min.
     async def setstatus(
         self, 
         ctx, 
@@ -288,12 +286,18 @@ class CogServerStatus(discord.Cog):
         """Slash Command: /server setstatus
         
         Manually sets the global server status, or sets it to automatically update. Only admins can do this.
+        Note: Discord limits channel name changes to twice every 10 min!
         """
+        # Only members with Manage Channels permission can use this command.
+        if not ctx.author.guild_permissions.manage_channels:
+            await ctx.respond(":warning: You do not have permission to run this command.", ephemeral=True)
+            return
+
         self.server_status = status
         status = status.capitalize()
         _msg = f"Global server status set to: {status}"
         _msg += f"\n\n(Please allow up to {self.bot.infl.no('second', UPDATE_INTERVAL*60)} for the status to change)"
-        await ctx.respond(_msg, ephemeral=True)
+        await ctx.respond(_msg)
         self.bot.log(f"[ServerStats] {ctx.author.name} set the global server status to: {status}")
 
 
