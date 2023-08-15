@@ -1,7 +1,7 @@
 """CogPlayerStats.py
 
 Handles tasks related to checking player stats and info.
-Date: 08/06/2023
+Date: 08/14/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -847,7 +847,6 @@ class CogPlayerStats(discord.Cog):
             await ctx.respond(f':warning: You do not own the nickname "{_escaped_nickname}"\n\nPlease use `/stats nickname claim` to claim it first.', ephemeral=True)
     
     @nickname.command(name = "assign", description="Assigns a Discord member to a nickname. Only admins can do this.")
-    @discord.default_permissions(manage_channels=True) # Only members with Manage Channels permission can use this command.
     async def assign(
         self, 
         ctx,
@@ -867,6 +866,13 @@ class CogPlayerStats(discord.Cog):
         
         Assigns a Discord member to be the owner of a nickname. Only admins can do this.
         """
+        # Only members with Manage Channels permission can use this command.
+        if not ctx.author.guild_permissions.manage_channels:
+            _msg = ":warning: You do not have permission to run this command."
+            _msg += "\n\nPlease try using `/stats nickname claim`, or contact an admin if you need to claim another nickname."
+            await ctx.respond(_msg, ephemeral=True)
+            return
+        
         _dbEntry = self.bot.db.getOne(
             "player_stats", 
             ["id"], 
