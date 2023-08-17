@@ -1,7 +1,7 @@
 """CogPlayerStats.py
 
 Handles tasks related to checking player stats and info.
-Date: 08/16/2023
+Date: 08/17/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -906,6 +906,52 @@ class CogPlayerStats(discord.Cog):
             await ctx.respond(f':white_check_mark: {member.name} has successfully been assigned as the owner of nickname "{_escaped_nickname}"!', ephemeral=True)
         else:
             await ctx.respond(f':warning: I have not seen a player by the nickname of "{_escaped_nickname}" play BF2:MC Online since June of 2023.', ephemeral=True)
+    
+    @nickname.command(name = "ownedby", description="See which nicknames are owned by a given Discord member")
+    @commands.cooldown(1, 60, commands.BucketType.channel)
+    async def ownedby(
+        self, 
+        ctx,
+        member: discord.Option(
+            discord.Member, 
+            description="Discord member"
+        )
+    ):
+        """Slash Command: /stats nickname ownedby
+        
+        Displays which nicknames are owned by a given Discord member.
+        """
+        _dbEntries = self.bot.db.getAll(
+            "player_stats", 
+            ["nickname", "first_seen", "score"], 
+            ("dis_uid = %s", [member.id])
+        )
+
+        if _dbEntries != None:
+            _nicknames = "```\n"
+            _rank = "```\n"
+            _first_seen = "```\n"
+            for _dbEntry in _dbEntries:
+                _nicknames += f"{_dbEntry['nickname']}\n"
+                _rank += f"{CS.get_rank_data(_dbEntry['score'])[0]}\n"
+                _first_seen += f"{_dbEntry['first_seen'].strftime('%m/%d/%Y')}\n"
+            _nicknames += "```"
+            _rank += "```"
+            _first_seen += "```"
+            _footer_text = "BF2:MC Online  |  Player Stats"
+            _footer_icon_url = "https://raw.githubusercontent.com/lilkingjr1/backstab-discord-bot/main/assets/icon.png"
+            _embed = discord.Embed(
+                title=f"{member.display_name}'s BF2:MC Online Nicknames",
+                color=member.color
+            )
+            _embed.set_thumbnail(url=member.display_avatar.url)
+            _embed.add_field(name="Nicknames:", value=_nicknames, inline=True)
+            _embed.add_field(name="Rank:", value=_rank, inline=True)
+            _embed.add_field(name="First Seen:", value=_first_seen, inline=True)
+            _embed.set_footer(text=_footer_text, icon_url=_footer_icon_url)
+            await ctx.respond(embed=_embed)
+        else:
+            await ctx.respond(f"{member.display_name} has not claimed or been assigned any BF2:MC Online nicknames yet.", ephemeral=True)
 
 
 def setup(bot):
