@@ -609,22 +609,29 @@ class CogPlayerStats(discord.Cog):
         
         _dbEntries = self.bot.db.getAll(
             "map_stats", 
-            ["map_name"], 
+            ["map_name", _gm_id], 
             None, 
             [_gm_id, "DESC"], 
-            [0, 2]
+            [0, 5]
         )
 
         if _dbEntries != None:
-            _desc = f"*Currently, the most played {gamemode} maps are...*\n"
+            _maps = "```\n"
+            _games = "```\n"
             for _i, _dbEntry in enumerate(_dbEntries):
-                _desc += f"\n{_i+1}. {CS.MAP_DATA[_dbEntry['map_name']][0]}"
+                _maps += f"{_i+1}. {CS.MAP_DATA[_dbEntry['map_name']][0]}\n"
+                _games += f"{self.bot.infl.no('game', _dbEntry[_gm_id]).rjust(11)}\n"
+            _maps += "```"
+            _games += "```"
             _embed = discord.Embed(
                 title=f"🗺  Most Played *{gamemode}* Maps",
-                description=_desc,
+                description=f"*Currently, the most played {gamemode} maps are...*",
                 color=discord.Colour.dark_blue()
             )
-            _embed.set_thumbnail(url=CS.MAP_IMAGES_URL.replace("<map_name>", _dbEntries[0]['map_name']))
+            _embed.add_field(name="Map:", value=_maps, inline=True)
+            _embed.add_field(name="Games Played:", value=_games, inline=True)
+            _embed.add_field(name="Most Played Map:", value="", inline=False)
+            _embed.set_image(url=CS.MAP_IMAGES_URL.replace("<map_name>", _dbEntries[0]['map_name']))
             _embed.set_footer(text=f"{self.bot.config['API']['HumanURL']}")
             await ctx.respond(embed=_embed)
         else:
