@@ -1,7 +1,7 @@
 """CogPlayerStats.py
 
 Handles tasks related to checking player stats and info.
-Date: 08/14/2023
+Date: 08/16/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -587,21 +587,21 @@ class CogPlayerStats(discord.Cog):
     """
     mostplayed = stats.create_subgroup("mostplayed", 'Commands related to checking "most played" related stats')
 
-    @mostplayed.command(name = "map", description="See which map has been played the most for a given gamemode")
+    @mostplayed.command(name = "map", description="See which maps have been played the most for a given gamemode")
     @commands.cooldown(1, 180, commands.BucketType.channel)
     async def map(
         self, 
         ctx, 
         gamemode: discord.Option(
             str, 
-            description="Which gamemode to see the most played map for", 
+            description="Which gamemode to see the most played maps for", 
             choices=["Conquest", "Capture the Flag"], 
             required=True
         )
     ):
         """Slash Command: /stats mostplayed map
         
-        Displays which map has been played the most for a given gamemode.
+        Displays which maps have been played the most for a given gamemode.
         """
         _gm_id = "conquest"
         if gamemode == "Capture the Flag":
@@ -612,16 +612,19 @@ class CogPlayerStats(discord.Cog):
             ["map_name"], 
             None, 
             [_gm_id, "DESC"], 
-            [0, 1]
+            [0, 2]
         )
 
         if _dbEntries != None:
+            _desc = f"*Currently, the most played {gamemode} maps are...*\n"
+            for _i, _dbEntry in enumerate(_dbEntries):
+                _desc += f"\n{_i+1}. {CS.MAP_DATA[_dbEntry['map_name']][0]}"
             _embed = discord.Embed(
-                title=f"🗺  Most Played {gamemode} Map",
-                description=f"*Currently, the most played {gamemode} map is...*",
+                title=f"🗺  Most Played *{gamemode}* Maps",
+                description=_desc,
                 color=discord.Colour.dark_blue()
             )
-            _embed.set_image(url=CS.MAP_IMAGES_URL.replace("<map_name>", _dbEntries[0]['map_name']))
+            _embed.set_thumbnail(url=CS.MAP_IMAGES_URL.replace("<map_name>", _dbEntries[0]['map_name']))
             _embed.set_footer(text=f"{self.bot.config['API']['HumanURL']}")
             await ctx.respond(embed=_embed)
         else:
