@@ -1,7 +1,7 @@
 """CogPlayerStats.py
 
 Handles tasks related to checking player stats and info.
-Date: 08/14/2023
+Date: 08/17/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -340,47 +340,48 @@ class CogPlayerStats(discord.Cog):
                 _server_found = False
                 # Search all current data for matching server
                 for _s_n in self.bot.cur_query_data['servers']:
+                    # If matching server is found in new data...
                     if _s_o['id'] == _s_n['id']:
                         _server_found = True
-                        # Record old data if current time is equal to old time (indicating a game finished),
-                        # this is the first detection (times will equal until next game),
-                        # the server isn't empty, and game was at least a few sec. long.
                         _old_time = _s_o['timeElapsed']
                         _new_time = _s_n['timeElapsed']
+                        # Record new data if current time is equal to old time (indicating a game finished),
+                        # this is the first detection (times will equal until next game),
+                        # the server isn't empty, and game was at least a few sec. long.
                         if (_old_time == _new_time 
-                            and _s_o['id'] not in self.bot.game_over_ids
-                            and _s_o['playersCount'] >= self.bot.config['PlayerStats']['MatchMinPlayers']
-                            and _old_time >= self.bot.config['PlayerStats']['MatchMinTimeSec']
+                            and _s_n['id'] not in self.bot.game_over_ids
+                            and _s_n['playersCount'] >= self.bot.config['PlayerStats']['MatchMinPlayers']
+                            and _new_time >= self.bot.config['PlayerStats']['MatchMinTimeSec']
                            ):
                             self.bot.log("[PlayerStats] A server has finished a game:")
-                            self.bot.log(f"Server     : {_s_o['serverName']}", time=False)
-                            self.bot.log(f"Map        : {CS.MAP_DATA[_s_o['mapName']][0]}", time=False)
+                            self.bot.log(f"Server     : {_s_n['serverName']}", time=False)
+                            self.bot.log(f"Map        : {CS.MAP_DATA[_s_n['mapName']][0]}", time=False)
                             #self.bot.log(f"Orig. Time : {_s_o['timeElapsed']} ({_old_time} sec.)", time=False, file=False) # DEBUGGING
                             #self.bot.log(f"New Time   : {_s_n['timeElapsed']} ({_new_time} sec.)", time=False, file=False)
                             # Record stats and get top player nickname
-                            _top_player = await self.record_player_stats(_s_o)
+                            _top_player = await self.record_player_stats(_s_n)
                             self.bot.log(f"Top Player : {_top_player}", time=False)
-                            await self.record_map_stats(_s_o)
+                            await self.record_map_stats(_s_n)
                             # Send temp message to player stats channel that stats were recorded
                             _text_channel = self.bot.get_channel(self.bot.config['PlayerStats']['PlayerStatsTextChannelID'])
                             _embed = discord.Embed(
                                 title="Player Stats Saved!",
-                                description=f"Map Played: *{CS.MAP_DATA[_s_o['mapName']][0]}*\nTop Player: *{self.bot.escape_discord_formatting(_top_player)}*",
+                                description=f"Map Played: *{CS.MAP_DATA[_s_n['mapName']][0]}*\nTop Player: *{self.bot.escape_discord_formatting(_top_player)}*",
                                 color=discord.Colour.green()
                             )
                             _embed.set_author(
-                                name=f"\"{_s_o['serverName']}\" has finished a game...", 
+                                name=f"\"{_s_n['serverName']}\" has finished a game...", 
                                 icon_url="https://raw.githubusercontent.com/lilkingjr1/backstab-discord-bot/main/assets/icon.png"
                             )
                             _embed.set_thumbnail(url="https://upload.wikimedia.org/wikipedia/commons/0/04/Save-icon-floppy-disk-transparent-with-circle.png")
-                            _embed.set_footer(text=f"Data captured at final game time of {self.bot.sec_to_mmss(_s_o['timeElapsed'])}")
+                            _embed.set_footer(text=f"Data captured at final game time of {self.bot.sec_to_mmss(_s_n['timeElapsed'])}")
                             await _text_channel.send(embed=_embed, delete_after=DEL_STATS_SAVED_MSG_SEC)
                             # Mark server as being in post game state
-                            self.bot.game_over_ids.append(_s_o['id'])
+                            self.bot.game_over_ids.append(_s_n['id'])
                         # Remove server from list if new game started
-                        elif _s_o['id'] in self.bot.game_over_ids and _old_time > _new_time:
+                        elif _s_n['id'] in self.bot.game_over_ids and _old_time > _new_time:
                             self.bot.log(f"[PlayerStats] \"{_s_n['serverName']}\" has started a new game on {CS.MAP_DATA[_s_n['mapName']][0]}.")
-                            self.bot.game_over_ids.remove(_s_o['id'])
+                            self.bot.game_over_ids.remove(_s_n['id'])
                         break
                 # If server has gone offline, record last known data
                 if not _server_found:
@@ -587,21 +588,21 @@ class CogPlayerStats(discord.Cog):
     """
     mostplayed = stats.create_subgroup("mostplayed", 'Commands related to checking "most played" related stats')
 
-    @mostplayed.command(name = "map", description="See which map has been played the most for a given gamemode")
+    @mostplayed.command(name = "map", description="See which maps have been played the most for a given gamemode")
     @commands.cooldown(1, 180, commands.BucketType.channel)
     async def map(
         self, 
         ctx, 
         gamemode: discord.Option(
             str, 
-            description="Which gamemode to see the most played map for", 
+            description="Which gamemode to see the most played maps for", 
             choices=["Conquest", "Capture the Flag"], 
             required=True
         )
     ):
         """Slash Command: /stats mostplayed map
         
-        Displays which map has been played the most for a given gamemode.
+        Displays which maps have been played the most for a given gamemode.
         """
         _gm_id = "conquest"
         if gamemode == "Capture the Flag":
@@ -609,18 +610,28 @@ class CogPlayerStats(discord.Cog):
         
         _dbEntries = self.bot.db.getAll(
             "map_stats", 
-            ["map_name"], 
+            ["map_name", _gm_id], 
             None, 
             [_gm_id, "DESC"], 
-            [0, 1]
+            [0, 5]
         )
 
         if _dbEntries != None:
+            _maps = "```\n"
+            _games = "```\n"
+            for _i, _dbEntry in enumerate(_dbEntries):
+                _maps += f"{_i+1}. {CS.MAP_DATA[_dbEntry['map_name']][0]}\n"
+                _games += f"{self.bot.infl.no('game', _dbEntry[_gm_id]).rjust(11)}\n"
+            _maps += "```"
+            _games += "```"
             _embed = discord.Embed(
-                title=f"🗺  Most Played {gamemode} Map",
-                description=f"*Currently, the most played {gamemode} map is...*",
+                title=f"🗺  Most Played *{gamemode}* Maps",
+                description=f"*Currently, the most played {gamemode} maps are...*",
                 color=discord.Colour.dark_blue()
             )
+            _embed.add_field(name="Map:", value=_maps, inline=True)
+            _embed.add_field(name="Games Played:", value=_games, inline=True)
+            _embed.add_field(name="Most Played Map:", value="", inline=False)
             _embed.set_image(url=CS.MAP_IMAGES_URL.replace("<map_name>", _dbEntries[0]['map_name']))
             _embed.set_footer(text=f"{self.bot.config['API']['HumanURL']}")
             await ctx.respond(embed=_embed)
@@ -895,6 +906,52 @@ class CogPlayerStats(discord.Cog):
             await ctx.respond(f':white_check_mark: {member.name} has successfully been assigned as the owner of nickname "{_escaped_nickname}"!', ephemeral=True)
         else:
             await ctx.respond(f':warning: I have not seen a player by the nickname of "{_escaped_nickname}" play BF2:MC Online since June of 2023.', ephemeral=True)
+    
+    @nickname.command(name = "ownedby", description="See which nicknames are owned by a given Discord member")
+    @commands.cooldown(1, 60, commands.BucketType.channel)
+    async def ownedby(
+        self, 
+        ctx,
+        member: discord.Option(
+            discord.Member, 
+            description="Discord member"
+        )
+    ):
+        """Slash Command: /stats nickname ownedby
+        
+        Displays which nicknames are owned by a given Discord member.
+        """
+        _dbEntries = self.bot.db.getAll(
+            "player_stats", 
+            ["nickname", "first_seen", "score"], 
+            ("dis_uid = %s", [member.id])
+        )
+
+        if _dbEntries != None:
+            _nicknames = "```\n"
+            _rank = "```\n"
+            _first_seen = "```\n"
+            for _dbEntry in _dbEntries:
+                _nicknames += f"{_dbEntry['nickname']}\n"
+                _rank += f"{CS.get_rank_data(_dbEntry['score'])[0]}\n"
+                _first_seen += f"{_dbEntry['first_seen'].strftime('%m/%d/%Y')}\n"
+            _nicknames += "```"
+            _rank += "```"
+            _first_seen += "```"
+            _footer_text = "BF2:MC Online  |  Player Stats"
+            _footer_icon_url = "https://raw.githubusercontent.com/lilkingjr1/backstab-discord-bot/main/assets/icon.png"
+            _embed = discord.Embed(
+                title=f"{member.display_name}'s BF2:MC Online Nicknames",
+                color=member.color
+            )
+            _embed.set_thumbnail(url=member.display_avatar.url)
+            _embed.add_field(name="Nicknames:", value=_nicknames, inline=True)
+            _embed.add_field(name="Rank:", value=_rank, inline=True)
+            _embed.add_field(name="First Seen:", value=_first_seen, inline=True)
+            _embed.set_footer(text=_footer_text, icon_url=_footer_icon_url)
+            await ctx.respond(embed=_embed)
+        else:
+            await ctx.respond(f"{member.display_name} has not claimed or been assigned any BF2:MC Online nicknames yet.", ephemeral=True)
 
 
 def setup(bot):
