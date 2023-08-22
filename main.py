@@ -10,7 +10,13 @@ import sys
 
 import discord
 from discord.ext import commands
+
+from iso639 import languages
+from langdetect import detect as LangDetect
+from deep_translator import GoogleTranslator
+
 from src import BackstabBot
+import common.CommonStrings as CS
 
 def main():
     VERSION = "2.7.0"
@@ -49,10 +55,55 @@ def main():
         """Event: On Message
         
         Replies to 'good bot' messages directed at the bot.
+        Translates messages sent in specific channels and in specific languages
+        to English based on the config file.
         """
+        ## Bot message
+        # Ignore messages sent by bots
+        if message.author.bot:
+            return
+
+        ## Good bot
         if bot.user.mentioned_in(message):
             if 'good bot' in message.content.lower():
                 await message.channel.send("Aww shucks!", reference=message)
+                return
+        
+        ## Translate
+        # Return if not enabled
+        if not bot.config['Translate']['Enabled']:
+            return
+        # Return if message not in config channels
+        if message.channel.id not in bot.config['Translate']['TextChannelIDs']:
+            return 
+        # Try to detect language and return if error
+        try:
+            _from_lang = LangDetect(message.content)
+        except:
+            bot.log("[Translate] Could not detect language of message:")
+            bot.log(f'\t{message.author.display_name}: "{message.content}"', time=False)
+            return
+        # If detected language in config 
+        if _from_lang in bot.config['Translate']['FromLangs']:
+            # Try to translate message and return if error
+            try:
+                _translated_msg = GoogleTranslator(source=_from_lang, target='en').translate(message.content)
+            except:
+                bot.log("[Translate] Could not translate message:")
+                bot.log(f'\t{message.author.display_name}: [{_from_lang} -> en] "{message.content}"', time=False)
+                return
+            # Build and send embed message
+            _author_name = f"{message.author.display_name} said:"
+            _author_url = message.author.display_avatar.url
+            _footer_text = f"Best attempt to translate {languages.get(part1=_from_lang).name} to English"
+            _footer_url = CS.COUNTRY_FLAGS_URL.replace("<code>", _from_lang)
+            _embed = discord.Embed(
+                description=f">>> {_translated_msg}",
+                color=discord.Colour.green()
+            )
+            _embed.set_author(name=_author_name, icon_url=_author_url)
+            _embed.set_footer(text=_footer_text, icon_url=_footer_url)
+            await message.channel.send(embed=_embed)
 
 
     @bot.slash_command(guild_ids=[bot.config['GuildID']], name = "about", description="Displays information about the Backstab Bot.")

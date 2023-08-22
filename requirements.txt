@@ -2,3 +2,6 @@ py-cord
 requests
 inflect
 git+https://github.com/lilkingjr1/simplemysql
+iso-639
+langdetect
+deep-translator
