@@ -64,7 +64,9 @@ RANK_DATA = {
 LEADERBOARD_STRINGS = {
     "score": "Score",
     "wins": "Wins",
-    "top_player": "MVP"
+    "top_player": "MVP",
+    "pph": "Points per Hour",
+    "playtime": "Play Time"
 }
 
 

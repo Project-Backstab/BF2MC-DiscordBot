@@ -275,7 +275,7 @@ class CogPlayerStats(discord.Cog):
                     # Calculate the gap for the pph time span
                     _gap_time_span = PPH_TIME_SPAN_HRS - _game_time_hours
                     # Calculate the gap score with the database pph
-                    _gap_score = _summed_stats['pph'] * _gap_time_span
+                    _gap_score = float(_summed_stats['pph']) * _gap_time_span
                     ## Calculate new pph
                     _pph = (_gap_score + _p['score']) / PPH_TIME_SPAN_HRS
                 # Fix minimal and maximum
@@ -375,6 +375,10 @@ class CogPlayerStats(discord.Cog):
                         _stats += f" {self.bot.infl.no('game', _e[stat])} won\n"
                     elif stat == 'top_player':
                         _stats += f" {self.bot.infl.no('game', _e[stat])}\n"
+                    elif stat == 'pph':
+                        _stats += f"{str(int(_e[stat])).rjust(4)} PPH\n"
+                    elif stat == 'playtime':
+                        _stats += f"{str(int(_e[stat]/SECONDS_PER_HOUR)).rjust(5)} hrs.\n"
                     else:
                         _stats += "\n"
                     _rank += 1
@@ -682,6 +686,26 @@ class CogPlayerStats(discord.Cog):
         Displays an unofficial leaderboard of players who were MVP in their games of BF2:MC Online.
         """
         paginator = self.get_paginator_for_stat('top_player')
+        await paginator.respond(ctx.interaction)
+
+    @leaderboard.command(name = "pph", description="See an unofficial leaderboard of players with the most points earned per hour on BF2:MC Online")
+    @commands.cooldown(1, 180, commands.BucketType.channel)
+    async def pph(self, ctx):
+        """Slash Command: /stats leaderboard pph
+        
+        Displays an unofficial leaderboard of players with the most points earned per hour on BF2:MC Online.
+        """
+        paginator = self.get_paginator_for_stat('pph')
+        await paginator.respond(ctx.interaction)
+
+    @leaderboard.command(name = "playtime", description="See an unofficial leaderboard of players with the most hours played on BF2:MC Online")
+    @commands.cooldown(1, 180, commands.BucketType.channel)
+    async def playtime(self, ctx):
+        """Slash Command: /stats leaderboard playtime
+        
+        Displays an unofficial leaderboard of players with the most hours played on BF2:MC Online.
+        """
+        paginator = self.get_paginator_for_stat('playtime')
         await paginator.respond(ctx.interaction)
 
     """Slash Command Sub-Group: /stats mostplayed
