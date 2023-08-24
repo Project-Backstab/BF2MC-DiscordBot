@@ -1,7 +1,7 @@
 """CogPlayerStats.py
 
 Handles tasks related to checking player stats and info.
-Date: 08/17/2023
+Date: 08/23/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -15,6 +15,11 @@ import common.CommonStrings as CS
 
 
 DEL_STATS_SAVED_MSG_SEC = 60
+PPH_TIME_SPAN_HRS = 5.0
+SECONDS_PER_HOUR = 60.0 * 60.0
+
+player_playtime_data = {}
+disconnected_player_data = []
 
 
 async def get_player_nicknames(ctx: discord.AutocompleteContext):
@@ -44,6 +49,8 @@ class CogPlayerStats(discord.Cog):
                 "first_seen DATE NOT NULL, "
                 "score INT NOT NULL, "
                 "deaths INT NOT NULL, "
+                "pph DECIMAL(5,2) UNSIGNED NOT NULL, "
+                "playtime INT UNSIGNED NOT NULL, "
                 "us_games INT NOT NULL, "
                 "ch_games INT NOT NULL, "
                 "ac_games INT NOT NULL, "
@@ -89,10 +96,34 @@ class CogPlayerStats(discord.Cog):
         return int(hours) * 3600 + int(minutes) * 60 + int(seconds)
     """
     
-    async def record_player_stats(self, server_data: dict) -> str:
+    async def record_player_stats(self, old_server_data: dict, new_server_data: dict):
         """Record Player Statistics
         
-        Additively records player statistics to the database given a server's JSON data.
+        TODO
+        """
+        for _t_o, _t_n in zip(old_server_data['teams'], new_server_data['teams']):
+            for _p_o in _t_o['players']:
+                # Player stayed connected
+                if _p_o in _t_n['players']:
+                    # Accumulate playtime
+                    if _p_o['name'] in player_playtime_data:
+                        player_playtime_data[_p_o['name']] += self.bot.config['PlayerStats']['QueryIntervalSeconds']
+                    else:
+                        player_playtime_data[_p_o['name']] = self.bot.config['PlayerStats']['QueryIntervalSeconds']
+                # Player disconnected
+                else:
+                    _p_o['serverID'] = old_server_data['id']
+                    _p_o['teamID'] = _t_o['id']
+                    _p_o['playtime'] = 0
+                    if _p_o['name'] in player_playtime_data:
+                        _p_o['playtime'] = player_playtime_data[_p_o['name']]
+                        player_playtime_data.pop(_p_o['name'])
+                    disconnected_player_data.append(_p_o)
+
+    async def record_round_stats(self, server_data: dict) -> str:
+        """Record Round Statistics
+        
+        Additively records end-round player statistics to the database given a server's JSON data.
         New records are created for first-seen players.
         Returns nickname string of the top player.
         """
@@ -120,6 +151,26 @@ class CogPlayerStats(discord.Cog):
                 _top_player = _p
         _top_player = _top_player['name']
 
+        # Add connected players' playtime data
+        for _t in server_data['teams']:
+            for _p in _t['players']:
+                try:
+                    _p['playtime'] = player_playtime_data[_p['name']]
+                    player_playtime_data.pop(_p['name'])
+                except:
+                    self.bot.log(f"Failed! ({_p['name']} not found in player playtime data)", time=False)
+                    return None
+
+        # Add disconnected players to server's data
+        _dc_itterable = disconnected_player_data.copy()
+        for _dc_p in _dc_itterable:
+            if _dc_p['serverID'] == server_data['id']:
+                for _t in server_data['teams']:
+                    if _dc_p['teamID'] == _t['id']:
+                        _t['players'].append(_dc_p)
+                        disconnected_player_data.remove(_dc_p)
+                        break
+
         # Calculate and record stats for each player in game
         for _t in server_data['teams']:
             for _p in _t['players']:
@@ -130,6 +181,8 @@ class CogPlayerStats(discord.Cog):
                         "pid",
                         "score",
                         "deaths",
+                        "pph",
+                        "playtime",
                         "us_games",
                         "ch_games",
                         "ac_games",
@@ -150,6 +203,8 @@ class CogPlayerStats(discord.Cog):
                         "pid": None,
                         "score": 0,
                         "deaths": 0,
+                        "pph": 0,
+                        "playtime": 18000, #DEBUG
                         "us_games": 0,
                         "ch_games": 0,
                         "ac_games": 0,
@@ -193,6 +248,45 @@ class CogPlayerStats(discord.Cog):
                 # Add if they were the top player
                 if _p['name'] == _top_player:
                     _summed_stats['top_player'] += 1
+
+                ## Calculate new PPH
+                _pph = 0.0
+                # Convert to hours
+                _db_time_hours = _summed_stats['playtime'] / SECONDS_PER_HOUR
+                _game_time_hours = _p['playtime'] / SECONDS_PER_HOUR
+                # Calculate total hours
+                _total_hours = _db_time_hours + _game_time_hours
+                # In case a player only played one hour (or less) total
+                if _total_hours <= 1.0:
+                    _pph = _summed_stats['score']
+                # In case a player played less then 5 hours total
+                elif _total_hours < PPH_TIME_SPAN_HRS:
+                    _pph = _summed_stats['score'] / _total_hours
+                # In case a player played for more than 5 hours straight
+                elif _game_time_hours >= PPH_TIME_SPAN_HRS:
+                    _pph = _p['score'] / _game_time_hours
+                # In case we have in total more then 5 hours played
+                else:
+                    """
+                    <---------------------- PPH_TIME_SPAN 5H ---------------------------------->
+                    <---------------------- gap_time_span 4H50 ---------------><-- GAME 10m --->
+                    <---------------------- gap_score  -----------------------><-- stat.score ->
+                    """
+                    # Calculate the gap for the pph time span
+                    _gap_time_span = PPH_TIME_SPAN_HRS - _game_time_hours
+                    # Calculate the gap score with the database pph
+                    _gap_score = _summed_stats['pph'] * _gap_time_span
+                    ## Calculate new pph
+                    _pph = (_gap_score + _p['score']) / PPH_TIME_SPAN_HRS
+                # Fix minimal and maximum
+                if _pph < 0:
+                    _pph = 1
+                elif _pph > 200:
+                    _pph = 200
+                _summed_stats['pph'] = _pph
+                
+                # Add playtime
+                _summed_stats['playtime'] += _p['playtime']
 
                 # Add OpenSpy PID if it is missing
                 if _summed_stats['pid'] == None:
@@ -329,10 +423,11 @@ class CogPlayerStats(discord.Cog):
         Runs every interval period, queries API for new data, 
         and records player data for any server that has finished a round.
         """
+        self.bot.reload_config() #DEBUG
         ## Query API for new data
         await self.bot.query_api()
 
-        ## Check each server if game over -> record stats
+        ## Record stats
         # Only check if old data exists (so we can compare), and current data exists (avoid errors)
         if self.bot.old_query_data != None and self.bot.cur_query_data != None:
             # For all existing servers...
@@ -358,8 +453,10 @@ class CogPlayerStats(discord.Cog):
                             self.bot.log(f"Map        : {CS.MAP_DATA[_s_o['mapName']][0]}", time=False)
                             #self.bot.log(f"Orig. Time : {_s_o['timeElapsed']} ({_old_time} sec.)", time=False, file=False) # DEBUGGING
                             #self.bot.log(f"New Time   : {_s_n['timeElapsed']} ({_new_time} sec.)", time=False, file=False)
-                            # Record stats and get top player nickname
-                            _top_player = await self.record_player_stats(_s_o)
+                            # Record player stats
+                            await self.record_player_stats(_s_o, _s_n)
+                            # Record round stats and get top player nickname
+                            _top_player = await self.record_round_stats(_s_o)
                             self.bot.log(f"Top Player : {_top_player}", time=False)
                             await self.record_map_stats(_s_o)
                             # Send temp message to player stats channel that stats were recorded
@@ -382,11 +479,16 @@ class CogPlayerStats(discord.Cog):
                         elif _s_o['id'] in self.bot.game_over_ids and _old_time > _new_time:
                             self.bot.log(f"[PlayerStats] \"{_s_n['serverName']}\" has started a new game on {CS.MAP_DATA[_s_n['mapName']][0]}.")
                             self.bot.game_over_ids.remove(_s_o['id'])
+                        # Record player stats if game is not over & is a valid running game
+                        elif (_s_o['id'] not in self.bot.game_over_ids
+                              and _s_o['playersCount'] >= self.bot.config['PlayerStats']['MatchMinPlayers']
+                             ):
+                            await self.record_player_stats(_s_o, _s_n)
                         break
                 # If server has gone offline, record last known data
                 if not _server_found:
                     self.bot.log(f"[PlayerStats] \"{_s_o['serverName']}\" has gone offline!")
-                    await self.record_player_stats(_s_o)
+                    await self.record_round_stats(_s_o)
                     # Remove server from game over list (if it happens to be in there)
                     if _s_o['id'] in self.bot.game_over_ids:
                         self.bot.game_over_ids.remove(_s_o['id'])
