@@ -14,8 +14,6 @@ from discord.ext.pages import Paginator, Page
 import common.CommonStrings as CS
 
 
-DEL_STATS_SAVED_MSG_SEC = 60
-PPH_TIME_SPAN_HRS = 5.0
 SECONDS_PER_HOUR = 60.0 * 60.0
 
 player_playtime_data = {}
@@ -251,6 +249,7 @@ class CogPlayerStats(discord.Cog):
 
                 ## Calculate new PPH
                 _pph = 0.0
+                _pph_time_span_hrs = self.bot.config['PlayerStats']['PphTimeSpanHrs']
                 # Convert to hours
                 _db_time_hours = _summed_stats['playtime'] / SECONDS_PER_HOUR
                 _game_time_hours = _p['playtime'] / SECONDS_PER_HOUR
@@ -260,10 +259,10 @@ class CogPlayerStats(discord.Cog):
                 if _total_hours <= 1.0:
                     _pph = _summed_stats['score']
                 # In case a player played less then 5 hours total
-                elif _total_hours < PPH_TIME_SPAN_HRS:
+                elif _total_hours < _pph_time_span_hrs:
                     _pph = _summed_stats['score'] / _total_hours
                 # In case a player played for more than 5 hours straight
-                elif _game_time_hours >= PPH_TIME_SPAN_HRS:
+                elif _game_time_hours >= _pph_time_span_hrs:
                     _pph = _p['score'] / _game_time_hours
                 # In case we have in total more then 5 hours played
                 else:
@@ -273,11 +272,11 @@ class CogPlayerStats(discord.Cog):
                     <---------------------- gap_score  -----------------------><-- stat.score ->
                     """
                     # Calculate the gap for the pph time span
-                    _gap_time_span = PPH_TIME_SPAN_HRS - _game_time_hours
+                    _gap_time_span = _pph_time_span_hrs - _game_time_hours
                     # Calculate the gap score with the database pph
                     _gap_score = float(_summed_stats['pph']) * _gap_time_span
                     ## Calculate new pph
-                    _pph = (_gap_score + _p['score']) / PPH_TIME_SPAN_HRS
+                    _pph = (_gap_score + _p['score']) / _pph_time_span_hrs
                 # Fix minimal and maximum
                 if _pph < 0:
                     _pph = 1
@@ -476,7 +475,7 @@ class CogPlayerStats(discord.Cog):
                             )
                             _embed.set_thumbnail(url="https://upload.wikimedia.org/wikipedia/commons/0/04/Save-icon-floppy-disk-transparent-with-circle.png")
                             _embed.set_footer(text=f"Data captured at final game time of {self.bot.sec_to_mmss(_s_o['timeElapsed'])}")
-                            await _text_channel.send(embed=_embed, delete_after=DEL_STATS_SAVED_MSG_SEC)
+                            await _text_channel.send(embed=_embed, delete_after=self.bot.config['PlayerStats']['DelStatsSavedMsgSec'])
                             # Mark server as being in post game state
                             self.bot.game_over_ids.append(_s_o['id'])
                         # Remove server from list if new game started
@@ -534,6 +533,8 @@ class CogPlayerStats(discord.Cog):
                 "first_seen",
                 "score",
                 "deaths",
+                "pph",
+                "playtime",
                 "us_games",
                 "ch_games",
                 "ac_games",
@@ -553,7 +554,7 @@ class CogPlayerStats(discord.Cog):
         )
         _escaped_nickname = self.bot.escape_discord_formatting(nickname)
         if _dbEntry:
-            _rank_data = CS.get_rank_data(_dbEntry['score'])
+            _rank_data = CS.get_rank_data(_dbEntry['score'], _dbEntry['pph'])
             _total_games = _dbEntry['cq_games'] + _dbEntry['cf_games']
             # Determine favorite gamemode
             _fav_gamemode = CS.GM_STRINGS['conquest'] # Default
@@ -599,6 +600,9 @@ class CogPlayerStats(discord.Cog):
             _win_percentage = (_dbEntry['wins'] / _total_games) * 100
             _win_percentage = round(_win_percentage, 2)
             _win_percentage = str(_win_percentage) + "%"
+            # Calculate play time in hours
+            _play_time = int(_dbEntry['playtime'] / SECONDS_PER_HOUR)
+            _play_time = self.bot.infl.no('hour', _play_time)
             # Build match history string
             _match_history = ""
             for _c in _dbEntry['match_history']:
@@ -637,16 +641,18 @@ class CogPlayerStats(discord.Cog):
             )
             _embed.set_thumbnail(url=_rank_data[1])
             _embed.add_field(name="Ribbons:", value=_ribbons, inline=False)
+            _embed.add_field(name="PPH:", value=int(_dbEntry['pph']), inline=True)
             _embed.add_field(name="Total Score:", value=_dbEntry['score'], inline=True)
+            _embed.add_field(name="MVP:", value=self.bot.infl.no('game', _dbEntry['top_player']), inline=True)
             _embed.add_field(name="Avg. Score/Game:", value=_avg_score_per_game, inline=True)
             _embed.add_field(name="Avg. Score/Life:", value=_avg_score_per_life, inline=True)
+            _embed.add_field(name="Play Time:", value=_play_time, inline=True)
             _embed.add_field(name="Total Games:", value=_total_games, inline=True)
             _embed.add_field(name="Games Won:", value=_dbEntry['wins'], inline=True)
             _embed.add_field(name="Win Percentage:", value=_win_percentage, inline=True)
-            _embed.add_field(name="MVP:", value=self.bot.infl.no('game', _dbEntry['top_player']), inline=True)
+            _embed.add_field(name="Match Result History:", value=_match_history, inline=False)
             _embed.add_field(name="Favorite Team:", value=_fav_team, inline=True)
             _embed.add_field(name="Favorite Gamemode:", value=_fav_gamemode, inline=True)
-            _embed.add_field(name="Match Result History:", value=_match_history, inline=False)
             _embed.set_footer(text=f"First seen online: {_dbEntry['first_seen'].strftime('%m/%d/%Y')} -- Unofficial data*")
             await ctx.respond(embed=_embed)
         else:
