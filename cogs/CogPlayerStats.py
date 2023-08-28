@@ -761,6 +761,8 @@ class CogPlayerStats(discord.Cog):
                 _pph = 50
             else:
                 _pph = _dbEntry['score'] / _playtime_hrs
+            _pph = round(_pph, 2)
+            print(_pph)
             self.bot.db.update(
                 "player_stats", 
                 {
