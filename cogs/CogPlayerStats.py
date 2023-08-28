@@ -761,8 +761,11 @@ class CogPlayerStats(discord.Cog):
                 _pph = 50
             else:
                 _pph = _dbEntry['score'] / _playtime_hrs
-            _pph = round(_pph, 2)
-            print(_pph)
+            # Fix minimal and maximum
+            if _pph < 0:
+                _pph = 1
+            elif _pph > 200:
+                _pph = 200
             self.bot.db.update(
                 "player_stats", 
                 {
