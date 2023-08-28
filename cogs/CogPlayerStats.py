@@ -1,7 +1,7 @@
 """CogPlayerStats.py
 
 Handles tasks related to checking player stats and info.
-Date: 08/17/2023
+Date: 08/28/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -14,7 +14,10 @@ from discord.ext.pages import Paginator, Page
 import common.CommonStrings as CS
 
 
-DEL_STATS_SAVED_MSG_SEC = 60
+SECONDS_PER_HOUR = 60.0 * 60.0
+
+player_playtime_data = {}
+disconnected_player_data = []
 
 
 async def get_player_nicknames(ctx: discord.AutocompleteContext):
@@ -35,6 +38,7 @@ async def get_player_nicknames(ctx: discord.AutocompleteContext):
 class CogPlayerStats(discord.Cog):
     def __init__(self, bot):
         self.bot = bot
+        ## Setup MySQL table 'player_stats'
         #self.bot.db.query("DROP TABLE player_stats") # DEBUGGING
         self.bot.db.query(
             "CREATE TABLE IF NOT EXISTS player_stats ("
@@ -44,6 +48,8 @@ class CogPlayerStats(discord.Cog):
                 "first_seen DATE NOT NULL, "
                 "score INT NOT NULL, "
                 "deaths INT NOT NULL, "
+                "pph DECIMAL(5,2) UNSIGNED NOT NULL, "
+                "playtime INT UNSIGNED NOT NULL, "
                 "us_games INT NOT NULL, "
                 "ch_games INT NOT NULL, "
                 "ac_games INT NOT NULL, "
@@ -60,6 +66,7 @@ class CogPlayerStats(discord.Cog):
                 "match_history CHAR(10) DEFAULT 'NNNNNNNNNN'"
             ")"
         )
+        ## Setup MySQL table 'map_stats'
         #self.bot.db.query("DROP TABLE map_stats") # DEBUGGING
         self.bot.db.query(
             "CREATE TABLE IF NOT EXISTS map_stats ("
@@ -67,6 +74,15 @@ class CogPlayerStats(discord.Cog):
                 "map_name TINYTEXT NOT NULL, "
                 "conquest INT DEFAULT 0, "
                 "capturetheflag INT DEFAULT 0"
+            ")"
+        )
+        ## Setup MySQL table 'player_blacklist'
+        #self.bot.db.query("DROP TABLE player_blacklist") # DEBUGGING
+        self.bot.db.query(
+            "CREATE TABLE IF NOT EXISTS player_blacklist ("
+                "id INT AUTO_INCREMENT PRIMARY KEY, "
+                "pid INT DEFAULT NULL, "
+                "nickname TINYTEXT NOT NULL"
             ")"
         )
     
@@ -89,10 +105,50 @@ class CogPlayerStats(discord.Cog):
         return int(hours) * 3600 + int(minutes) * 60 + int(seconds)
     """
     
-    async def record_player_stats(self, server_data: dict) -> str:
+    async def record_player_stats(self, old_server_data: dict, new_server_data: dict):
         """Record Player Statistics
         
-        Additively records player statistics to the database given a server's JSON data.
+        Takes old and new data for a single server and checks all the players in the data.
+        If a player stays connected (ie. they appear in both data sets), their playtime (based
+        on query interval) is accumulated to the `player_playtime_data` in-memory dictionary.
+        If a player disconnects (ie. they disapear from new data), they (along with their,
+        Server ID, Team ID, and Playtime) are moved to the `disconnected_players_data` in-memory list.
+        """
+        _all_old_players = old_server_data['teams'][0]['players'] + old_server_data['teams'][1]['players']
+        _all_new_players = new_server_data['teams'][0]['players'] + new_server_data['teams'][1]['players']
+        for _p_o in _all_old_players:
+            # Check if player stayed connected
+            _player_stayed = False
+            for _p_n in _all_new_players:
+                if _p_o['id'] == _p_n['id']:
+                    _player_stayed = True
+                    break
+            # Player stayed connected
+            if _player_stayed:
+                # Accumulate playtime
+                if _p_o['name'] in player_playtime_data:
+                    player_playtime_data[_p_o['name']] += self.bot.config['PlayerStats']['QueryIntervalSeconds']
+                else:
+                    #print(f"+ {_p_o['name']}") # DEBUGGING
+                    player_playtime_data[_p_o['name']] = self.bot.config['PlayerStats']['QueryIntervalSeconds']
+            # Player disconnected & participated in game
+            elif _p_o['score'] != 0 or _p_o['deaths'] != 0:
+                #print(f"- {_p_o['name']}") # DEBUGGING
+                _p_o['serverID'] = old_server_data['id']
+                if _p_o in old_server_data['teams'][0]['players']:
+                    _p_o['teamID'] = old_server_data['teams'][0]['id']
+                else:
+                    _p_o['teamID'] = old_server_data['teams'][1]['id']
+                _p_o['playtime'] = 0
+                if _p_o['name'] in player_playtime_data:
+                    _p_o['playtime'] = player_playtime_data[_p_o['name']]
+                    player_playtime_data.pop(_p_o['name'])
+                disconnected_player_data.append(_p_o)
+
+    async def record_round_stats(self, server_data: dict) -> str:
+        """Record Round Statistics
+        
+        Additively records end-round player statistics to the database given a server's JSON data.
         New records are created for first-seen players.
         Returns nickname string of the top player.
         """
@@ -102,6 +158,13 @@ class CogPlayerStats(discord.Cog):
         if server_data == None or server_data['playersCount'] < 2:
             self.bot.log("Failed! (Invalid server data passed)", time=False)
             return None
+        
+        # Get blacklisted nicknames
+        _nickname_blacklist = []
+        _dbEntries = self.bot.db.getAll("player_blacklist", ["nickname"])
+        if _dbEntries:
+            for _dbEntry in _dbEntries:
+                _nickname_blacklist.append(_dbEntry['nickname'])
         
         # Calculate winning team ID (-1 = Draw)
         _winning_team_ID = -1
@@ -114,15 +177,43 @@ class CogPlayerStats(discord.Cog):
         _top_player = None
         _all_players = server_data['teams'][0]['players'] + server_data['teams'][1]['players']
         for _p in _all_players:
+            # Skip player if their nickname is blacklisted
+            if _p['name'] in _nickname_blacklist: continue
+            # Replace if no top player, score is higher, or score is identical and deaths are lower
             if (_top_player == None
                 or _p['score'] > _top_player['score']
                 or (_p['score'] == _top_player['score'] and _p['deaths'] < _top_player['deaths'])):
                 _top_player = _p
         _top_player = _top_player['name']
 
+        # Add connected players' playtime data
+        for _t in server_data['teams']:
+            for _p in _t['players']:
+                try:
+                    _p['playtime'] = player_playtime_data[_p['name']]
+                    player_playtime_data.pop(_p['name'])
+                except:
+                    self.bot.log(f"\n[WARNING] \"{_p['name']}\" was not found in player playtime data! Ignoring playtime... ", time=False, end="")
+                    _p['playtime'] = 0
+
+        # Add disconnected players to server's data
+        #print(f"\nDC'd players:\n{disconnected_player_data}") # DEBUGGING
+        for _dc_p in disconnected_player_data.copy():
+            if _dc_p['serverID'] == server_data['id']:
+                for _t in server_data['teams']:
+                    if _dc_p['teamID'] == _t['id']:
+                        _t['players'].append(_dc_p)
+                        disconnected_player_data.remove(_dc_p)
+                        break
+
         # Calculate and record stats for each player in game
         for _t in server_data['teams']:
             for _p in _t['players']:
+                # Skip player if their nickname is blacklisted
+                if _p['name'] in _nickname_blacklist: continue
+                # Skip player if they did not participate in the game
+                if _p['score'] == 0 and _p['deaths'] == 0: continue
+                # Find player in DB
                 _dbEntry = self.bot.db.getOne(
                     "player_stats", 
                     [
@@ -130,6 +221,8 @@ class CogPlayerStats(discord.Cog):
                         "pid",
                         "score",
                         "deaths",
+                        "pph",
+                        "playtime",
                         "us_games",
                         "ch_games",
                         "ac_games",
@@ -143,13 +236,15 @@ class CogPlayerStats(discord.Cog):
                     ], 
                     ("nickname=%s", [_p['name']])
                 )
-                
-                # Sum round stats with existing player stats
+                ## Sum round stats with existing player stats
+                # Copy existing DB entry for summation, or prepare a new entry for new players
                 if _dbEntry == None:
                     _summed_stats = {
                         "pid": None,
                         "score": 0,
                         "deaths": 0,
+                        "pph": 0,
+                        "playtime": 0,
                         "us_games": 0,
                         "ch_games": 0,
                         "ac_games": 0,
@@ -185,14 +280,55 @@ class CogPlayerStats(discord.Cog):
                     _summed_stats['ac_games'] += 1
                 else:
                     _summed_stats['eu_games'] += 1
-                # Add gamemode they played
-                if server_data['gameType'] == "capturetheflag":
-                    _summed_stats['cf_games'] += 1
-                else:
-                    _summed_stats['cq_games'] += 1
+                # Add gamemode they played (if they didn't disconnect [indicated by 'serverID' key])
+                if 'serverID' not in _p:
+                    if server_data['gameType'] == "capturetheflag":
+                        _summed_stats['cf_games'] += 1
+                    else:
+                        _summed_stats['cq_games'] += 1
                 # Add if they were the top player
                 if _p['name'] == _top_player:
                     _summed_stats['top_player'] += 1
+
+                ## Calculate new PPH
+                _pph = 0.0
+                _pph_time_span_hrs = self.bot.config['PlayerStats']['PphTimeSpanHrs']
+                # Convert to hours
+                _db_time_hours = _summed_stats['playtime'] / SECONDS_PER_HOUR
+                _game_time_hours = _p['playtime'] / SECONDS_PER_HOUR
+                # Calculate total hours
+                _total_hours = _db_time_hours + _game_time_hours
+                # In case a player only played one hour (or less) total
+                if _total_hours <= 1.0:
+                    _pph = _summed_stats['score']
+                # In case a player played less then 5 hours total
+                elif _total_hours < _pph_time_span_hrs:
+                    _pph = _summed_stats['score'] / _total_hours
+                # In case a player played for more than 5 hours straight
+                elif _game_time_hours >= _pph_time_span_hrs:
+                    _pph = _p['score'] / _game_time_hours
+                # In case we have in total more then 5 hours played
+                else:
+                    """
+                    <---------------------- PPH_TIME_SPAN 5H ---------------------------------->
+                    <---------------------- gap_time_span 4H50 ---------------><-- GAME 10m --->
+                    <---------------------- gap_score  -----------------------><-- stat.score ->
+                    """
+                    # Calculate the gap for the pph time span
+                    _gap_time_span = _pph_time_span_hrs - _game_time_hours
+                    # Calculate the gap score with the database pph
+                    _gap_score = float(_summed_stats['pph']) * _gap_time_span
+                    ## Calculate new pph
+                    _pph = (_gap_score + _p['score']) / _pph_time_span_hrs
+                # Fix minimal and maximum
+                if _pph < 0:
+                    _pph = 1
+                elif _pph > 200:
+                    _pph = 200
+                _summed_stats['pph'] = _pph
+                
+                # Add playtime
+                _summed_stats['playtime'] += _p['playtime']
 
                 # Add OpenSpy PID if it is missing
                 if _summed_stats['pid'] == None:
@@ -281,6 +417,10 @@ class CogPlayerStats(discord.Cog):
                         _stats += f" {self.bot.infl.no('game', _e[stat])} won\n"
                     elif stat == 'top_player':
                         _stats += f" {self.bot.infl.no('game', _e[stat])}\n"
+                    elif stat == 'pph':
+                        _stats += f"{str(int(_e[stat])).rjust(4)} PPH\n"
+                    elif stat == 'playtime':
+                        _stats += f"{str(int(_e[stat]/SECONDS_PER_HOUR)).rjust(5)} hrs.\n"
                     else:
                         _stats += "\n"
                     _rank += 1
@@ -332,7 +472,7 @@ class CogPlayerStats(discord.Cog):
         ## Query API for new data
         await self.bot.query_api()
 
-        ## Check each server if game over -> record stats
+        ## Record stats
         # Only check if old data exists (so we can compare), and current data exists (avoid errors)
         if self.bot.old_query_data != None and self.bot.cur_query_data != None:
             # For all existing servers...
@@ -358,8 +498,8 @@ class CogPlayerStats(discord.Cog):
                             self.bot.log(f"Map        : {CS.MAP_DATA[_s_o['mapName']][0]}", time=False)
                             #self.bot.log(f"Orig. Time : {_s_o['timeElapsed']} ({_old_time} sec.)", time=False, file=False) # DEBUGGING
                             #self.bot.log(f"New Time   : {_s_n['timeElapsed']} ({_new_time} sec.)", time=False, file=False)
-                            # Record stats and get top player nickname
-                            _top_player = await self.record_player_stats(_s_o)
+                            # Record round stats and get top player nickname
+                            _top_player = await self.record_round_stats(_s_o)
                             self.bot.log(f"Top Player : {_top_player}", time=False)
                             await self.record_map_stats(_s_o)
                             # Send temp message to player stats channel that stats were recorded
@@ -375,18 +515,23 @@ class CogPlayerStats(discord.Cog):
                             )
                             _embed.set_thumbnail(url="https://upload.wikimedia.org/wikipedia/commons/0/04/Save-icon-floppy-disk-transparent-with-circle.png")
                             _embed.set_footer(text=f"Data captured at final game time of {self.bot.sec_to_mmss(_s_o['timeElapsed'])}")
-                            await _text_channel.send(embed=_embed, delete_after=DEL_STATS_SAVED_MSG_SEC)
+                            await _text_channel.send(embed=_embed, delete_after=self.bot.config['PlayerStats']['DelStatsSavedMsgSec'])
                             # Mark server as being in post game state
                             self.bot.game_over_ids.append(_s_o['id'])
                         # Remove server from list if new game started
                         elif _s_o['id'] in self.bot.game_over_ids and _old_time > _new_time:
                             self.bot.log(f"[PlayerStats] \"{_s_n['serverName']}\" has started a new game on {CS.MAP_DATA[_s_n['mapName']][0]}.")
                             self.bot.game_over_ids.remove(_s_o['id'])
+                        # Record player stats if game is not over & is a valid running game
+                        elif (_s_o['id'] not in self.bot.game_over_ids
+                              and _s_o['playersCount'] >= self.bot.config['PlayerStats']['MatchMinPlayers']
+                             ):
+                            await self.record_player_stats(_s_o, _s_n)
                         break
                 # If server has gone offline, record last known data
                 if not _server_found:
                     self.bot.log(f"[PlayerStats] \"{_s_o['serverName']}\" has gone offline!")
-                    await self.record_player_stats(_s_o)
+                    await self.record_round_stats(_s_o)
                     # Remove server from game over list (if it happens to be in there)
                     if _s_o['id'] in self.bot.game_over_ids:
                         self.bot.game_over_ids.remove(_s_o['id'])
@@ -428,6 +573,8 @@ class CogPlayerStats(discord.Cog):
                 "first_seen",
                 "score",
                 "deaths",
+                "pph",
+                "playtime",
                 "us_games",
                 "ch_games",
                 "ac_games",
@@ -447,7 +594,7 @@ class CogPlayerStats(discord.Cog):
         )
         _escaped_nickname = self.bot.escape_discord_formatting(nickname)
         if _dbEntry:
-            _rank_data = CS.get_rank_data(_dbEntry['score'])
+            _rank_data = CS.get_rank_data(_dbEntry['score'], _dbEntry['pph'])
             _total_games = _dbEntry['cq_games'] + _dbEntry['cf_games']
             # Determine favorite gamemode
             _fav_gamemode = CS.GM_STRINGS['conquest'] # Default
@@ -493,6 +640,9 @@ class CogPlayerStats(discord.Cog):
             _win_percentage = (_dbEntry['wins'] / _total_games) * 100
             _win_percentage = round(_win_percentage, 2)
             _win_percentage = str(_win_percentage) + "%"
+            # Calculate play time in hours
+            _play_time = int(_dbEntry['playtime'] / SECONDS_PER_HOUR)
+            _play_time = self.bot.infl.no('hour', _play_time)
             # Build match history string
             _match_history = ""
             for _c in _dbEntry['match_history']:
@@ -531,20 +681,96 @@ class CogPlayerStats(discord.Cog):
             )
             _embed.set_thumbnail(url=_rank_data[1])
             _embed.add_field(name="Ribbons:", value=_ribbons, inline=False)
+            _embed.add_field(name="PPH:", value=int(_dbEntry['pph']), inline=True)
             _embed.add_field(name="Total Score:", value=_dbEntry['score'], inline=True)
+            _embed.add_field(name="MVP:", value=self.bot.infl.no('game', _dbEntry['top_player']), inline=True)
             _embed.add_field(name="Avg. Score/Game:", value=_avg_score_per_game, inline=True)
             _embed.add_field(name="Avg. Score/Life:", value=_avg_score_per_life, inline=True)
+            _embed.add_field(name="Play Time:", value=_play_time, inline=True)
             _embed.add_field(name="Total Games:", value=_total_games, inline=True)
             _embed.add_field(name="Games Won:", value=_dbEntry['wins'], inline=True)
             _embed.add_field(name="Win Percentage:", value=_win_percentage, inline=True)
-            _embed.add_field(name="MVP:", value=self.bot.infl.no('game', _dbEntry['top_player']), inline=True)
+            _embed.add_field(name="Match Result History:", value=_match_history, inline=False)
             _embed.add_field(name="Favorite Team:", value=_fav_team, inline=True)
             _embed.add_field(name="Favorite Gamemode:", value=_fav_gamemode, inline=True)
-            _embed.add_field(name="Match Result History:", value=_match_history, inline=False)
             _embed.set_footer(text=f"First seen online: {_dbEntry['first_seen'].strftime('%m/%d/%Y')} -- Unofficial data*")
             await ctx.respond(embed=_embed)
         else:
             await ctx.respond(f':warning: We have not seen a player by the nickname of "{_escaped_nickname}" play BF2:MC Online since June of 2023.', ephemeral=True)
+
+    @stats.command(name = "rankreqs", description="Displays the requirements to reach every rank")
+    @commands.cooldown(1, 180, commands.BucketType.channel)
+    async def rankreqs(
+        self,
+        ctx
+    ):
+        """Slash Command: /stats rankreqs
+        
+        Displays the requirements to reach every rank.
+        """
+        _ranks = "```\n"
+        _score = "```\n"
+        _pph = "```\n"
+        for _i, (_reqs, _rank) in enumerate(CS.RANK_DATA.items()):
+            _ranks += f"{(str(_i+1) + '.').ljust(4)}{_rank[0]}\n"
+            if _rank[0] == "Private":
+                _score += f"{str(0).rjust(6)} pts.\n"
+                _pph += f"{str(0).rjust(5)} PPH\n"
+            else:
+                _score += f"{str(_reqs[0]).rjust(6)} pts.\n"
+                _pph += f"{str(_reqs[1]).rjust(5)} PPH\n"
+        _ranks += "```"
+        _score += "```"
+        _pph += "```"
+        _embed = discord.Embed(
+            title=f":military_medal:  BF2:MC Online | Rank Requirements  :military_medal:",
+            description=f"The following are the requirements to reach each respective rank.\n*Each requirement must be met to reach the rank.*",
+            color=discord.Colour.dark_blue()
+        )
+        _embed.add_field(name="Ranks:", value=_ranks, inline=True)
+        _embed.add_field(name="Score:", value=_score, inline=True)
+        _embed.add_field(name="Points per Hour:", value=_pph, inline=True)
+        _embed.set_footer(text="Source: The original online game (un-modified).\nThe only thing missing are the Medal requirements (which are currently un-trackable).")
+        await ctx.respond(embed=_embed)
+
+    @stats.command(name = "dbupdate", description="Temp command to update existing player's playtime and PPH in the DB")
+    async def dbupdate(
+        self,
+        ctx
+    ):
+        """Slash Command: /stats dbupdate
+        # DEBUGGING
+        Temp command to update existing player's playtime and PPH in the DB.
+        """
+        if ctx.author.id != 164591752966045696:
+            await ctx.respond("You are not authorized to run this command.", ephemeral=True)
+            return
+        await ctx.defer(ephemeral=True)
+        _dbEntries = self.bot.db.getAll(
+            "player_stats", 
+            ["id", "pid", "score", "cq_games", "cf_games"], 
+            None
+        )
+        _count = 0
+        for _dbEntry in _dbEntries:
+            _playtime_sec = (_dbEntry['cq_games'] * 755) + (_dbEntry['cf_games'] * 720)
+            _playtime_hrs = _playtime_sec / SECONDS_PER_HOUR
+            if _playtime_hrs <= 1.0:
+                _pph = _dbEntry['score']
+            elif _dbEntry['pid'] == None and _dbEntry['score'] / _playtime_hrs > 50:
+                _pph = 50
+            else:
+                _pph = _dbEntry['score'] / _playtime_hrs
+            self.bot.db.update(
+                "player_stats", 
+                {
+                    "pph": _pph, 
+                    "playtime": _playtime_sec
+                }, 
+                [f"id={_dbEntry['id']}"]
+            )
+            _count += 1
+        await ctx.respond(f"{_count} DB entries updated", ephemeral=True)
 
     """Slash Command Sub-Group: /stats leaderboard
     
@@ -580,6 +806,26 @@ class CogPlayerStats(discord.Cog):
         Displays an unofficial leaderboard of players who were MVP in their games of BF2:MC Online.
         """
         paginator = self.get_paginator_for_stat('top_player')
+        await paginator.respond(ctx.interaction)
+
+    @leaderboard.command(name = "pph", description="See an unofficial leaderboard of players with the most points earned per hour on BF2:MC Online")
+    @commands.cooldown(1, 180, commands.BucketType.channel)
+    async def pph(self, ctx):
+        """Slash Command: /stats leaderboard pph
+        
+        Displays an unofficial leaderboard of players with the most points earned per hour on BF2:MC Online.
+        """
+        paginator = self.get_paginator_for_stat('pph')
+        await paginator.respond(ctx.interaction)
+
+    @leaderboard.command(name = "playtime", description="See an unofficial leaderboard of players with the most hours played on BF2:MC Online")
+    @commands.cooldown(1, 180, commands.BucketType.channel)
+    async def playtime(self, ctx):
+        """Slash Command: /stats leaderboard playtime
+        
+        Displays an unofficial leaderboard of players with the most hours played on BF2:MC Online.
+        """
+        paginator = self.get_paginator_for_stat('playtime')
         await paginator.respond(ctx.interaction)
 
     """Slash Command Sub-Group: /stats mostplayed
@@ -728,9 +974,9 @@ class CogPlayerStats(discord.Cog):
                 ["id", "dis_uid"], 
                 ("nickname=%s", [nickname])
             )
+            _escaped_nickname = self.bot.escape_discord_formatting(nickname)
             # Check if the nickname is valid
             if _dbEntry:
-                _escaped_nickname = self.bot.escape_discord_formatting(nickname)
                 # Check if the nickname is unclaimed
                 if not _dbEntry['dis_uid']:
                     _str1 = "You are only allowed to claim **one** nickname and this action **cannot** be undone!"
@@ -753,7 +999,7 @@ class CogPlayerStats(discord.Cog):
                     _str2 = "If you have proof that you own this nickname, please contact an admin."
                     await ctx.respond(_str1 + "\n\n" + _str2, ephemeral=True)
             else:
-                _str1 = f':warning: We have not seen the nickname of "{nickname}" play BF2:MC Online since June of 2023.'
+                _str1 = f':warning: We have not seen the nickname of "{_escaped_nickname}" play BF2:MC Online since June of 2023.'
                 _str2 = "(A nickname must have been used to play at least 1 game before it can be claimed)"
                 await ctx.respond(_str1 + "\n\n" + _str2, ephemeral=True)
         else:
@@ -923,9 +1169,10 @@ class CogPlayerStats(discord.Cog):
         """
         _dbEntries = self.bot.db.getAll(
             "player_stats", 
-            ["nickname", "first_seen", "score"], 
+            ["nickname", "first_seen", "score", "pph"], 
             ("dis_uid = %s", [member.id])
         )
+        _member_name = self.bot.escape_discord_formatting(member.display_name)
 
         if _dbEntries != None:
             _nicknames = "```\n"
@@ -933,7 +1180,7 @@ class CogPlayerStats(discord.Cog):
             _first_seen = "```\n"
             for _dbEntry in _dbEntries:
                 _nicknames += f"{_dbEntry['nickname']}\n"
-                _rank += f"{CS.get_rank_data(_dbEntry['score'])[0]}\n"
+                _rank += f"{CS.get_rank_data(_dbEntry['score'], _dbEntry['pph'])[0]}\n"
                 _first_seen += f"{_dbEntry['first_seen'].strftime('%m/%d/%Y')}\n"
             _nicknames += "```"
             _rank += "```"
@@ -941,7 +1188,7 @@ class CogPlayerStats(discord.Cog):
             _footer_text = "BF2:MC Online  |  Player Stats"
             _footer_icon_url = "https://raw.githubusercontent.com/lilkingjr1/backstab-discord-bot/main/assets/icon.png"
             _embed = discord.Embed(
-                title=f"{member.display_name}'s BF2:MC Online Nicknames",
+                title=f"{_member_name}'s BF2:MC Online Nicknames",
                 color=member.color
             )
             _embed.set_thumbnail(url=member.display_avatar.url)
@@ -951,8 +1198,75 @@ class CogPlayerStats(discord.Cog):
             _embed.set_footer(text=_footer_text, icon_url=_footer_icon_url)
             await ctx.respond(embed=_embed)
         else:
-            await ctx.respond(f"{member.display_name} has not claimed or been assigned any BF2:MC Online nicknames yet.", ephemeral=True)
+            await ctx.respond(f"{_member_name} has not claimed or been assigned any BF2:MC Online nicknames yet.", ephemeral=True)
 
+    @nickname.command(name = "blacklist", description="Add or remove a nickname from the BF2:MC Online stats blacklist. Only admins can do this.")
+    async def blacklist(
+        self,
+        ctx,
+        action: discord.Option(
+            str, 
+            description="Add or Remove", 
+            choices=["Add", "Remove"], 
+            required=True
+        ),
+        nickname: discord.Option(
+            str, 
+            description="Nickname of player (can be nickname not currently in the database)", 
+            autocomplete=discord.utils.basic_autocomplete(get_player_nicknames), 
+            max_length=255, 
+            required=True
+        )
+    ):
+        """Slash Command: /stats nickname blacklist
+        
+        Adds or removes a nickname from the BF2:MC Online stats blacklist.
+        Nicknames on the blacklist will not accumulate stats when games end.
+        Existing stats for the nickname will not be adjusted or removed.
+        Only admins can do this.
+        """
+        # Only members with Manage Channels permission can use this command.
+        if not ctx.author.guild_permissions.manage_channels:
+            await ctx.respond(":warning: You do not have permission to run this command.", ephemeral=True)
+            return
+        
+        # Get existing nickname PID (if it exists)
+        _dbPID = self.bot.db.getOne(
+            "player_stats", ["pid"], ("nickname=%s", [nickname])
+        )
+        # Get existing blacklist entry (if it exists)
+        _dbEntry = self.bot.db.getOne(
+            "player_blacklist", ["id"], ("nickname=%s", [nickname])
+        )
+        _escaped_nickname = self.bot.escape_discord_formatting(nickname)
+        # Add nickname
+        if action == "Add":
+            if not _dbEntry:
+                _pid = None
+                if _dbPID:
+                    _pid = _dbPID['pid']
+                self.bot.db.insert(
+                    "player_blacklist", 
+                    {"pid": _pid, "nickname": nickname}
+                )
+                self.bot.log(f'[PlayerStats] {ctx.author.name}#{ctx.author.discriminator} has added the nickname of "{nickname}" to the blacklist.')
+                _msg = f':white_check_mark: "{_escaped_nickname}" has been added to the stats blacklist.'
+                _msg += "\n\nThis nickname will not accumulate stats when games end as long as they are on this list."
+                _msg += "\nExisting stats for this nickname will not be adjusted or removed."
+                await ctx.respond(_msg, ephemeral=True)
+            else:
+                await ctx.respond(f'"{_escaped_nickname}" is already blacklisted.', ephemeral=True)
+        # Remove nickname
+        else:
+            if _dbEntry:
+                self.bot.db.delete(
+                    "player_blacklist", 
+                    ("id = %s", [_dbEntry['id']])
+                )
+                self.bot.log(f'[PlayerStats] {ctx.author.name}#{ctx.author.discriminator} has removed the nickname of "{nickname}" from the blacklist.')
+                await ctx.respond(f':white_check_mark: Removed "{_escaped_nickname}" from the blacklist.', ephemeral=True)
+            else:
+                await ctx.respond(f':warning: Could not find "{_escaped_nickname}" in the blacklist.', ephemeral=True)
 
 def setup(bot):
     """Called by Pycord to setup the cog"""

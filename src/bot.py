@@ -1,7 +1,7 @@
 """bot.py
 
 A subclass of `discord.Bot` that adds ease-of-use instance variables and functions (e.g. database object).
-Date: 08/02/2023
+Date: 08/27/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -44,6 +44,7 @@ class BackstabBot(discord.Bot):
     @staticmethod
     def escape_discord_formatting(text: str) -> str:
         """Return a string that escapes any of Discord's formatting special characters for the given string"""
+        if text == None: return "None"
         formatting_chars = ['*', '_', '`', '~', '|']
         escaped_chars = ['\\*', '\\_', '\\`', '\\~', '\\|']
         for char, escaped_char in zip(formatting_chars, escaped_chars):
@@ -158,7 +159,8 @@ class BackstabBot(discord.Bot):
 
         # Check if the request was successful (status code 200 indicates success)
         if _DEBUG:
-            self.cur_query_data = _DEBUG
+            self.reload_config()
+            self.cur_query_data = self.config['DEBUG']
             self.log("Success (DEBUG).", time=False, file=False)
         elif _response.status_code == 200:
             self.log("Success.", time=False, file=False)
