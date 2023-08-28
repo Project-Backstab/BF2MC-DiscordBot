@@ -733,50 +733,6 @@ class CogPlayerStats(discord.Cog):
         _embed.set_footer(text="Source: The original online game (un-modified).\nThe only thing missing are the Medal requirements (which are currently un-trackable).")
         await ctx.respond(embed=_embed)
 
-    @stats.command(name = "dbupdate", description="Temp command to update existing player's playtime and PPH in the DB")
-    async def dbupdate(
-        self,
-        ctx
-    ):
-        """Slash Command: /stats dbupdate
-        # DEBUGGING
-        Temp command to update existing player's playtime and PPH in the DB.
-        """
-        if ctx.author.id != 164591752966045696:
-            await ctx.respond("You are not authorized to run this command.", ephemeral=True)
-            return
-        await ctx.defer(ephemeral=True)
-        _dbEntries = self.bot.db.getAll(
-            "player_stats", 
-            ["id", "pid", "score", "cq_games", "cf_games"], 
-            None
-        )
-        _count = 0
-        for _dbEntry in _dbEntries:
-            _playtime_sec = (_dbEntry['cq_games'] * 755) + (_dbEntry['cf_games'] * 720)
-            _playtime_hrs = _playtime_sec / SECONDS_PER_HOUR
-            if _playtime_hrs <= 1.0:
-                _pph = _dbEntry['score']
-            elif _dbEntry['pid'] == None and _dbEntry['score'] / _playtime_hrs > 50:
-                _pph = 50
-            else:
-                _pph = _dbEntry['score'] / _playtime_hrs
-            # Fix minimal and maximum
-            if _pph < 0:
-                _pph = 1
-            elif _pph > 200:
-                _pph = 200
-            self.bot.db.update(
-                "player_stats", 
-                {
-                    "pph": _pph, 
-                    "playtime": _playtime_sec
-                }, 
-                [f"id={_dbEntry['id']}"]
-            )
-            _count += 1
-        await ctx.respond(f"{_count} DB entries updated", ephemeral=True)
-
     """Slash Command Sub-Group: /stats leaderboard
     
     A sub-group of commands related to checking the leaderboard for various player stats.
