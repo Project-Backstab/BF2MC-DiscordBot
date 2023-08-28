@@ -698,6 +698,41 @@ class CogPlayerStats(discord.Cog):
         else:
             await ctx.respond(f':warning: We have not seen a player by the nickname of "{_escaped_nickname}" play BF2:MC Online since June of 2023.', ephemeral=True)
 
+    @stats.command(name = "rankreqs", description="Displays the requirements to reach every rank")
+    @commands.cooldown(1, 180, commands.BucketType.channel)
+    async def rankreqs(
+        self,
+        ctx
+    ):
+        """Slash Command: /stats rankreqs
+        
+        Displays the requirements to reach every rank.
+        """
+        _ranks = "```\n"
+        _score = "```\n"
+        _pph = "```\n"
+        for _i, (_reqs, _rank) in enumerate(CS.RANK_DATA.items()):
+            _ranks += f"{(str(_i+1) + '.').ljust(4)}{_rank[0]}\n"
+            if _rank[0] == "Private":
+                _score += f"{str(0).rjust(6)} pts.\n"
+                _pph += f"{str(0).rjust(5)} PPH\n"
+            else:
+                _score += f"{str(_reqs[0]).rjust(6)} pts.\n"
+                _pph += f"{str(_reqs[1]).rjust(5)} PPH\n"
+        _ranks += "```"
+        _score += "```"
+        _pph += "```"
+        _embed = discord.Embed(
+            title=f":military_medal:  BF2:MC Online | Rank Requirements  :military_medal:",
+            description=f"The following are the requirements to reach each respective rank.\n*Each requirement must be met to reach the rank.*",
+            color=discord.Colour.dark_blue()
+        )
+        _embed.add_field(name="Ranks:", value=_ranks, inline=True)
+        _embed.add_field(name="Score:", value=_score, inline=True)
+        _embed.add_field(name="Points per Hour:", value=_pph, inline=True)
+        _embed.set_footer(text="Source: The original online game (un-modified).\nThe only thing missing are the Medal requirements (which are currently un-trackable).")
+        await ctx.respond(embed=_embed)
+
     @stats.command(name = "dbupdate", description="Temp command to update existing player's playtime and PPH in the DB")
     async def dbupdate(
         self,
