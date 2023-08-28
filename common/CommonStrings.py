@@ -7,6 +7,7 @@ Licensed under GNU GPLv3 - See LICENSE for more details.
 """
 
 COUNTRY_FLAGS_URL = "https://stats.bf2mc.net/static/img/flags/<code>.png"
+LANG_FLAGS_URL = "https://www.unknown.nu/flags/images/<code>-100"
 GM_THUMBNAILS_URL = "https://raw.githubusercontent.com/lilkingjr1/backstab-discord-bot/main/assets/gamemode_thumbnails/<gamemode>.png"
 MAP_IMAGES_URL = "https://raw.githubusercontent.com/lilkingjr1/backstab-discord-bot/main/assets/map_images/<map_name>.png"
 STATUS_STRINGS = {
