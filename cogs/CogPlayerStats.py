@@ -1133,7 +1133,7 @@ class CogPlayerStats(discord.Cog):
         """
         _dbEntries = self.bot.db.getAll(
             "player_stats", 
-            ["nickname", "first_seen", "score"], 
+            ["nickname", "first_seen", "score", "pph"], 
             ("dis_uid = %s", [member.id])
         )
         _member_name = self.bot.escape_discord_formatting(member.display_name)
@@ -1144,7 +1144,7 @@ class CogPlayerStats(discord.Cog):
             _first_seen = "```\n"
             for _dbEntry in _dbEntries:
                 _nicknames += f"{_dbEntry['nickname']}\n"
-                _rank += f"{CS.get_rank_data(_dbEntry['score'])[0]}\n"
+                _rank += f"{CS.get_rank_data(_dbEntry['score'], _dbEntry['pph'])[0]}\n"
                 _first_seen += f"{_dbEntry['first_seen'].strftime('%m/%d/%Y')}\n"
             _nicknames += "```"
             _rank += "```"
