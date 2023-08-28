@@ -1,7 +1,7 @@
 """main.py
 
 Main file to start Backstab
-Date: 08/21/2023
+Date: 08/28/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -146,7 +146,7 @@ def main():
         
         Displays information about the Backstab Bot.
         """
-        _description = ("Backstab is a custom Discord bot, written for the Battlefield 2: Modern Combat Veterans community, "
+        _description = ("BackStab is a custom Discord bot, written for the Battlefield 2: Modern Combat Veterans community, "
                         "that can provide server status information and other useful related information.")
         _embed = discord.Embed(
             title="About:",
@@ -154,7 +154,7 @@ def main():
             color=discord.Colour.blue()
         )
         _embed.set_author(
-            name="Backstab", 
+            name="BackStab Bot", 
             icon_url="https://raw.githubusercontent.com/lilkingjr1/backstab-discord-bot/main/assets/icon.png"
         )
         _embed.set_thumbnail(url="https://cdn.discordapp.com/icons/502923049541304320/4d8d584de5d9baec281d4861c6b11781.webp?size=4096")

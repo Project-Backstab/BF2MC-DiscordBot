@@ -1,7 +1,7 @@
 """CogPlayerStats.py
 
 Handles tasks related to checking player stats and info.
-Date: 08/27/2023
+Date: 08/28/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -1136,6 +1136,7 @@ class CogPlayerStats(discord.Cog):
             ["nickname", "first_seen", "score"], 
             ("dis_uid = %s", [member.id])
         )
+        _member_name = self.bot.escape_discord_formatting(member.display_name)
 
         if _dbEntries != None:
             _nicknames = "```\n"
@@ -1151,7 +1152,7 @@ class CogPlayerStats(discord.Cog):
             _footer_text = "BF2:MC Online  |  Player Stats"
             _footer_icon_url = "https://raw.githubusercontent.com/lilkingjr1/backstab-discord-bot/main/assets/icon.png"
             _embed = discord.Embed(
-                title=f"{member.display_name}'s BF2:MC Online Nicknames",
+                title=f"{_member_name}'s BF2:MC Online Nicknames",
                 color=member.color
             )
             _embed.set_thumbnail(url=member.display_avatar.url)
@@ -1161,7 +1162,7 @@ class CogPlayerStats(discord.Cog):
             _embed.set_footer(text=_footer_text, icon_url=_footer_icon_url)
             await ctx.respond(embed=_embed)
         else:
-            await ctx.respond(f"{member.display_name} has not claimed or been assigned any BF2:MC Online nicknames yet.", ephemeral=True)
+            await ctx.respond(f"{_member_name} has not claimed or been assigned any BF2:MC Online nicknames yet.", ephemeral=True)
 
     @nickname.command(name = "blacklist", description="Add or remove a nickname from the BF2:MC Online stats blacklist. Only admins can do this.")
     async def blacklist(
