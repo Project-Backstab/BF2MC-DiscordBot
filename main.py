@@ -118,8 +118,8 @@ def main():
             bot.log("[Translate] Could not detect language of message:")
             bot.log(f'\t{message.author.display_name}: "{message.content}"', time=False)
             return
-        # If message detected language not primary language in config
-        if _from_lang != bot.config['Translate']['PrimaryLang']:
+        # If message's detected language is in config's FromLangs
+        if _from_lang in bot.config['Translate']['FromLangs']:
             # Translate it to primary language
             _embed = get_translated_msg_embed(message, _from_lang, bot.config['Translate']['PrimaryLang'])
             if _embed:
@@ -131,6 +131,7 @@ def main():
                 _cached_embed = _cached_msg.embeds[0]
                 if "translate" in _cached_embed.footer.text:
                     _to_lang = _cached_embed.footer.icon_url[-6:-4]
+                    # If author is trying to reply to a primary language embed
                     if _to_lang == bot.config['Translate']['PrimaryLang']:
                         return
                     _embed = get_translated_msg_embed(message, _from_lang, _to_lang, False)
