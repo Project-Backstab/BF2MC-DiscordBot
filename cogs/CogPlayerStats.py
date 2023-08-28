@@ -38,6 +38,7 @@ async def get_player_nicknames(ctx: discord.AutocompleteContext):
 class CogPlayerStats(discord.Cog):
     def __init__(self, bot):
         self.bot = bot
+        ## Setup MySQL table 'player_stats'
         #self.bot.db.query("DROP TABLE player_stats") # DEBUGGING
         self.bot.db.query(
             "CREATE TABLE IF NOT EXISTS player_stats ("
@@ -65,6 +66,7 @@ class CogPlayerStats(discord.Cog):
                 "match_history CHAR(10) DEFAULT 'NNNNNNNNNN'"
             ")"
         )
+        ## Setup MySQL table 'map_stats'
         #self.bot.db.query("DROP TABLE map_stats") # DEBUGGING
         self.bot.db.query(
             "CREATE TABLE IF NOT EXISTS map_stats ("
@@ -72,6 +74,15 @@ class CogPlayerStats(discord.Cog):
                 "map_name TINYTEXT NOT NULL, "
                 "conquest INT DEFAULT 0, "
                 "capturetheflag INT DEFAULT 0"
+            ")"
+        )
+        ## Setup MySQL table 'player_blacklist'
+        #self.bot.db.query("DROP TABLE player_blacklist") # DEBUGGING
+        self.bot.db.query(
+            "CREATE TABLE IF NOT EXISTS player_blacklist ("
+                "id INT AUTO_INCREMENT PRIMARY KEY, "
+                "pid INT DEFAULT NULL, "
+                "nickname TINYTEXT NOT NULL"
             ")"
         )
     
@@ -148,6 +159,13 @@ class CogPlayerStats(discord.Cog):
             self.bot.log("Failed! (Invalid server data passed)", time=False)
             return None
         
+        # Get blacklisted nicknames
+        _nickname_blacklist = []
+        _dbEntries = self.bot.db.getAll("player_blacklist", ["nickname"])
+        if _dbEntries:
+            for _dbEntry in _dbEntries:
+                _nickname_blacklist.append(_dbEntry['nickname'])
+        
         # Calculate winning team ID (-1 = Draw)
         _winning_team_ID = -1
         if server_data['teams'][0]['score'] > server_data['teams'][1]['score']:
@@ -159,6 +177,9 @@ class CogPlayerStats(discord.Cog):
         _top_player = None
         _all_players = server_data['teams'][0]['players'] + server_data['teams'][1]['players']
         for _p in _all_players:
+            # Skip player if their nickname is blacklisted
+            if _p['name'] in _nickname_blacklist: continue
+            # Replace if no top player, score is higher, or score is identical and deaths are lower
             if (_top_player == None
                 or _p['score'] > _top_player['score']
                 or (_p['score'] == _top_player['score'] and _p['deaths'] < _top_player['deaths'])):
@@ -172,8 +193,8 @@ class CogPlayerStats(discord.Cog):
                     _p['playtime'] = player_playtime_data[_p['name']]
                     player_playtime_data.pop(_p['name'])
                 except:
-                    self.bot.log(f"\n[WARNING] {_p['name']} was not found in player playtime data! Skipping...", time=False, end="")
-                    continue
+                    self.bot.log(f"\n[WARNING] \"{_p['name']}\" was not found in player playtime data! Ignoring playtime... ", time=False, end="")
+                    _p['playtime'] = 0
 
         # Add disconnected players to server's data
         #print(f"\nDC'd players:\n{disconnected_player_data}") # DEBUGGING
@@ -188,6 +209,8 @@ class CogPlayerStats(discord.Cog):
         # Calculate and record stats for each player in game
         for _t in server_data['teams']:
             for _p in _t['players']:
+                # Skip player if their nickname is blacklisted
+                if _p['name'] in _nickname_blacklist: continue
                 # Skip player if they did not participate in the game
                 if _p['score'] == 0 and _p['deaths'] == 0: continue
                 # Find player in DB
@@ -915,9 +938,9 @@ class CogPlayerStats(discord.Cog):
                 ["id", "dis_uid"], 
                 ("nickname=%s", [nickname])
             )
+            _escaped_nickname = self.bot.escape_discord_formatting(nickname)
             # Check if the nickname is valid
             if _dbEntry:
-                _escaped_nickname = self.bot.escape_discord_formatting(nickname)
                 # Check if the nickname is unclaimed
                 if not _dbEntry['dis_uid']:
                     _str1 = "You are only allowed to claim **one** nickname and this action **cannot** be undone!"
@@ -940,7 +963,7 @@ class CogPlayerStats(discord.Cog):
                     _str2 = "If you have proof that you own this nickname, please contact an admin."
                     await ctx.respond(_str1 + "\n\n" + _str2, ephemeral=True)
             else:
-                _str1 = f':warning: We have not seen the nickname of "{nickname}" play BF2:MC Online since June of 2023.'
+                _str1 = f':warning: We have not seen the nickname of "{_escaped_nickname}" play BF2:MC Online since June of 2023.'
                 _str2 = "(A nickname must have been used to play at least 1 game before it can be claimed)"
                 await ctx.respond(_str1 + "\n\n" + _str2, ephemeral=True)
         else:
@@ -1140,6 +1163,73 @@ class CogPlayerStats(discord.Cog):
         else:
             await ctx.respond(f"{member.display_name} has not claimed or been assigned any BF2:MC Online nicknames yet.", ephemeral=True)
 
+    @nickname.command(name = "blacklist", description="Add or remove a nickname from the BF2:MC Online stats blacklist. Only admins can do this.")
+    async def blacklist(
+        self,
+        ctx,
+        action: discord.Option(
+            str, 
+            description="Add or Remove", 
+            choices=["Add", "Remove"], 
+            required=True
+        ),
+        nickname: discord.Option(
+            str, 
+            description="Nickname of player (can be nickname not currently in the database)", 
+            autocomplete=discord.utils.basic_autocomplete(get_player_nicknames), 
+            max_length=255, 
+            required=True
+        )
+    ):
+        """Slash Command: /stats nickname blacklist
+        
+        Adds or removes a nickname from the BF2:MC Online stats blacklist.
+        Nicknames on the blacklist will not accumulate stats when games end.
+        Existing stats for the nickname will not be adjusted or removed.
+        Only admins can do this.
+        """
+        # Only members with Manage Channels permission can use this command.
+        if not ctx.author.guild_permissions.manage_channels:
+            await ctx.respond(":warning: You do not have permission to run this command.", ephemeral=True)
+            return
+        
+        # Get existing nickname PID (if it exists)
+        _dbPID = self.bot.db.getOne(
+            "player_stats", ["pid"], ("nickname=%s", [nickname])
+        )
+        # Get existing blacklist entry (if it exists)
+        _dbEntry = self.bot.db.getOne(
+            "player_blacklist", ["id"], ("nickname=%s", [nickname])
+        )
+        _escaped_nickname = self.bot.escape_discord_formatting(nickname)
+        # Add nickname
+        if action == "Add":
+            if not _dbEntry:
+                _pid = None
+                if _dbPID:
+                    _pid = _dbPID['pid']
+                self.bot.db.insert(
+                    "player_blacklist", 
+                    {"pid": _pid, "nickname": nickname}
+                )
+                self.bot.log(f'[PlayerStats] {ctx.author.name}#{ctx.author.discriminator} has added the nickname of "{nickname}" to the blacklist.')
+                _msg = f':white_check_mark: "{_escaped_nickname}" has been added to the stats blacklist.'
+                _msg += "\n\nThis nickname will not accumulate stats when games end as long as they are on this list."
+                _msg += "\nExisting stats for this nickname will not be adjusted or removed."
+                await ctx.respond(_msg, ephemeral=True)
+            else:
+                await ctx.respond(f'"{_escaped_nickname}" is already blacklisted.', ephemeral=True)
+        # Remove nickname
+        else:
+            if _dbEntry:
+                self.bot.db.delete(
+                    "player_blacklist", 
+                    ("id = %s", [_dbEntry['id']])
+                )
+                self.bot.log(f'[PlayerStats] {ctx.author.name}#{ctx.author.discriminator} has removed the nickname of "{nickname}" from the blacklist.')
+                await ctx.respond(f':white_check_mark: Removed "{_escaped_nickname}" from the blacklist.', ephemeral=True)
+            else:
+                await ctx.respond(f':warning: Could not find "{_escaped_nickname}" in the blacklist.', ephemeral=True)
 
 def setup(bot):
     """Called by Pycord to setup the cog"""

@@ -159,7 +159,8 @@ class BackstabBot(discord.Bot):
 
         # Check if the request was successful (status code 200 indicates success)
         if _DEBUG:
-            self.cur_query_data = _DEBUG
+            self.reload_config()
+            self.cur_query_data = self.config['DEBUG']
             self.log("Success (DEBUG).", time=False, file=False)
         elif _response.status_code == 200:
             self.log("Success.", time=False, file=False)
