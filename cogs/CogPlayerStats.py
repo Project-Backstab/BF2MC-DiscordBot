@@ -744,6 +744,7 @@ class CogPlayerStats(discord.Cog):
         """
         if ctx.author.id != 164591752966045696:
             await ctx.respond("You are not authorized to run this command.", ephemeral=True)
+            return
         await ctx.defer(ephemeral=True)
         _dbEntries = self.bot.db.getAll(
             "player_stats", 
