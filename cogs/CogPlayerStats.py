@@ -1,7 +1,7 @@
 """CogPlayerStats.py
 
 Handles tasks related to checking player stats and info.
-Date: 08/28/2023
+Date: 09/01/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -412,7 +412,7 @@ class CogPlayerStats(discord.Cog):
                     _rank_str = f"#{_rank}"
                     _nicknames += f"{_rank_str.ljust(3)} | {_e['nickname']}\n"
                     if stat == 'score':
-                        _stats += f"{str(_e[stat]).rjust(5)} pts.\n"
+                        _stats += f"{str(_e[stat]).rjust(6)} pts.\n"
                     elif stat == 'wins':
                         _stats += f" {self.bot.infl.no('game', _e[stat])} won\n"
                     elif stat == 'top_player':
