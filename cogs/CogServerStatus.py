@@ -1,7 +1,7 @@
 """CogServerStatus.py
 
 Handles tasks related to checking server status and info.
-Date: 08/14/2023
+Date: 09/01/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -53,6 +53,7 @@ class CogServerStatus(discord.Cog):
         """Get Server Statistic Embeds
         
         Returns a list of Discord Embeds that each display each server's current statistics.
+        Excludes Server IDs in the config blacklist.
         """
         # Check for missing query data
         if self.bot.cur_query_data == None:
@@ -90,6 +91,10 @@ class CogServerStatus(discord.Cog):
         # Default - Build server stat embeds
         _embeds = []
         for s in self.bot.cur_query_data['servers']:
+            # Skip blacklisted Server IDs
+            if s['id'] in self.bot.config['ServerStatus']['Blacklist']:
+                continue
+
             # Get total player count
             _player_count = s['playersCount']
 
