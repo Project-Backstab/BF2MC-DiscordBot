@@ -1,7 +1,7 @@
 """CogPlayerStats.py
 
 Handles tasks related to checking player stats and info.
-Date: 09/01/2023
+Date: 09/04/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -1214,7 +1214,7 @@ class CogPlayerStats(discord.Cog):
                 _msg = f':white_check_mark: "{_escaped_nickname}" has been added to the stats blacklist.'
                 _msg += "\n\nThis nickname will not accumulate stats when games end as long as they are on this list."
                 _msg += "\nExisting stats for this nickname will not be adjusted or removed."
-                await ctx.respond(_msg, ephemeral=True)
+                await ctx.respond(_msg)
             else:
                 await ctx.respond(f'"{_escaped_nickname}" is already blacklisted.', ephemeral=True)
         # Remove nickname
