@@ -1,7 +1,7 @@
 """main.py
 
 Main file to start Backstab
-Date: 09/04/2023
+Date: 09/09/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -19,7 +19,7 @@ from src import BackstabBot
 import common.CommonStrings as CS
 
 def main():
-    VERSION = "3.1.1"
+    VERSION = "3.2.0"
     AUTHORS = "Red-Thirten"
     COGS_LIST = [
         "CogPlayerStats",
