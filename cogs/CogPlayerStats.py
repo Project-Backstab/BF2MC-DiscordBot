@@ -494,19 +494,25 @@ class CogPlayerStats(discord.Cog):
                             and _old_time >= self.bot.config['PlayerStats']['MatchMinTimeSec']
                            ):
                             self.bot.log("[PlayerStats] A server has finished a game:")
-                            self.bot.log(f"Server     : {_s_o['serverName']}", time=False)
-                            self.bot.log(f"Map        : {CS.MAP_DATA[_s_o['mapName']][0]}", time=False)
-                            #self.bot.log(f"Orig. Time : {_s_o['timeElapsed']} ({_old_time} sec.)", time=False, file=False) # DEBUGGING
-                            #self.bot.log(f"New Time   : {_s_n['timeElapsed']} ({_new_time} sec.)", time=False, file=False)
+                            self.bot.log(f"Server      : {_s_o['serverName']}", time=False)
                             # Record round stats and get top player nickname
                             _top_player = await self.record_round_stats(_s_o)
-                            self.bot.log(f"Top Player : {_top_player}", time=False)
+                            self.bot.log(f"Gamemode    : {CS.GM_STRINGS[_s_o['gameType']]}", time=False)
+                            self.bot.log(f"Final Score : {_s_o['teams'][0]['score']} / {_s_o['teams'][1]['score']}", time=False)
+                            self.bot.log(f"Map         : {CS.MAP_DATA[_s_o['mapName']][0]}", time=False)
+                            self.bot.log(f"Top Player  : {_top_player}", time=False)
+                            #self.bot.log(f"Orig. Time : {_s_o['timeElapsed']} ({_old_time} sec.)", time=False, file=False) # DEBUGGING
+                            #self.bot.log(f"New Time   : {_s_n['timeElapsed']} ({_new_time} sec.)", time=False, file=False)
                             await self.record_map_stats(_s_o)
                             # Send temp message to player stats channel that stats were recorded
                             _text_channel = self.bot.get_channel(self.bot.config['PlayerStats']['PlayerStatsTextChannelID'])
+                            _desc_text = f"Gamemode: *{CS.GM_STRINGS[_s_o['gameType']]}*"
+                            _desc_text += f"\nMap: *{CS.MAP_DATA[_s_o['mapName']][0]}*"
+                            _desc_text += f"\nFinal Score: *{_s_o['teams'][0]['score']} / {_s_o['teams'][1]['score']}*"
+                            _desc_text += f"\nMVP: *{self.bot.escape_discord_formatting(_top_player)}*"
                             _embed = discord.Embed(
                                 title="Player Stats Saved!",
-                                description=f"Map Played: *{CS.MAP_DATA[_s_o['mapName']][0]}*\nTop Player: *{self.bot.escape_discord_formatting(_top_player)}*",
+                                description=_desc_text,
                                 color=discord.Colour.green()
                             )
                             _embed.set_author(
