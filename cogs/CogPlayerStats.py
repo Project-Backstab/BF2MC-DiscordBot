@@ -46,6 +46,7 @@ class CogPlayerStats(discord.Cog):
                 "pid INT DEFAULT NULL, "
                 "nickname TINYTEXT NOT NULL, "
                 "first_seen DATE NOT NULL, "
+                "last_seen TIMESTAMP DEFAULT NULL, "
                 "score INT NOT NULL, "
                 "deaths INT NOT NULL, "
                 "pph DECIMAL(5,2) UNSIGNED NOT NULL, "
@@ -330,6 +331,9 @@ class CogPlayerStats(discord.Cog):
                 
                 # Add playtime
                 _summed_stats['playtime'] += _p['playtime']
+
+                # Replace last-seen timestamp
+                _summed_stats['last_seen'] = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
 
                 # Add OpenSpy PID if it is missing
                 if _summed_stats['pid'] == None:
