@@ -1,7 +1,7 @@
 """CogServerStatus.py
 
 Handles tasks related to checking server status and info.
-Date: 09/01/2023
+Date: 09/09/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -221,10 +221,12 @@ class CogServerStatus(discord.Cog):
         Runs every interval period, references bot's latest query data, 
         updates status voice channel, and updates info text channel.
         """
-        ## Calculate total players online
+        ## Calculate total players online (excluding blacklisted servers)
         _total_online = 0
         if self.bot.cur_query_data != None:
-            _total_online = self.bot.cur_query_data['playersCount']
+            for _s in self.bot.cur_query_data['servers']:
+                if _s['id'] not in self.bot.config['ServerStatus']['Blacklist']:
+                    _total_online += _s['playersCount']
         
         ## Update bot's activity if total players has changed
         if _total_online != self.total_online:
