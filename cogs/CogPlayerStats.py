@@ -155,7 +155,7 @@ class CogPlayerStats(discord.Cog):
         self.bot.log(f"Recording round stats... ", end='', time=False)
 
         # Sanitize input (because I'm paranoid)
-        if server_data == None or server_data['playersCount'] < 2:
+        if server_data == None or server_data['playersCount'] < self.bot.config['PlayerStats']['MatchMinPlayers']:
             self.bot.log("Failed! (Invalid server data passed)", time=False)
             return None
         
@@ -175,16 +175,17 @@ class CogPlayerStats(discord.Cog):
         
         # Calculate top player
         _top_player = None
-        _all_players = server_data['teams'][0]['players'] + server_data['teams'][1]['players']
-        for _p in _all_players:
-            # Skip player if their nickname is blacklisted
-            if _p['name'] in _nickname_blacklist: continue
-            # Replace if no top player, score is higher, or score is identical and deaths are lower
-            if (_top_player == None
-                or _p['score'] > _top_player['score']
-                or (_p['score'] == _top_player['score'] and _p['deaths'] < _top_player['deaths'])):
-                _top_player = _p
-        _top_player = _top_player['name']
+        if server_data['playersCount'] >= self.bot.config['PlayerStats']['MvpMinPlayers']:
+            _all_players = server_data['teams'][0]['players'] + server_data['teams'][1]['players']
+            for _p in _all_players:
+                # Skip player if their nickname is blacklisted
+                if _p['name'] in _nickname_blacklist: continue
+                # Replace if no top player, score is higher, or score is identical and deaths are lower
+                if (_top_player == None
+                    or _p['score'] > _top_player['score']
+                    or (_p['score'] == _top_player['score'] and _p['deaths'] < _top_player['deaths'])):
+                    _top_player = _p
+            _top_player = _top_player['name']
 
         # Add connected players' playtime data
         for _t in server_data['teams']:
@@ -355,7 +356,7 @@ class CogPlayerStats(discord.Cog):
         self.bot.log(f"Recording map stats... ", end='', time=False)
 
         # Sanitize input (because I'm paranoid)
-        if server_data == None or server_data['playersCount'] < 2:
+        if server_data == None or server_data['playersCount'] < self.bot.config['PlayerStats']['MatchMinPlayers']:
             self.bot.log("Failed! (Invalid server data passed)", time=False)
             return None
         
