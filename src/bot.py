@@ -1,7 +1,7 @@
 """bot.py
 
 A subclass of `discord.Bot` that adds ease-of-use instance variables and functions (e.g. database object).
-Date: 08/27/2023
+Date: 09/11/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -15,13 +15,13 @@ import discord
 from discord.ext import commands
 from simplemysql import SimpleMysql
 import inflect
+import common.CommonStrings as CS
 
 LOG_FILE = "BackstabBot.log"
 
 
 class BackstabBot(discord.Bot):
     @staticmethod
-    #get_datetime_str
     def log(msg: str, time: bool = True, file: bool = True, end: str = '\n'):
         """Custom Logging
 
@@ -57,6 +57,23 @@ class BackstabBot(discord.Bot):
         minutes = seconds // 60
         seconds_remaining = seconds % 60
         return f"{minutes:02d}:{seconds_remaining:02d}"
+    
+    @staticmethod
+    def get_player_attr_list_str(players: list, attribute: str) -> str:
+        """Get Player Attribute List String
+        
+        Returns a formatted code block string that contains a list of a given attribute for all players.
+        Accepted Attributes: name, score, deaths
+        """
+        _str = "```\n"
+        for _i, _p in enumerate(players):
+            if attribute == 'name':
+                _str += f"{_i+1}. {_p[attribute]}\n"
+            elif attribute == 'score':
+                _str += f"  {str(_p[attribute]).rjust(2)} pts\n"
+            elif attribute == 'deaths':
+                _str += f"   {str(_p['deaths']).rjust(2)}\n"
+        return _str + "```"
     
     @staticmethod
     def get_config() -> dict:
@@ -101,6 +118,14 @@ class BackstabBot(discord.Bot):
         Called when the bot successfully connects to the API and becomes online.
         Excessive API calls in this function should be avoided.
         """
+        # Print invite link and close bot if it is not already in a guild
+        if len(self.guilds) < 1:
+            print("==========================================================================")
+            print("Use following link to invite bot to guild, and then restart the bot:")
+            print(f"https://discord.com/api/oauth2/authorize?client_id={self.application_id}&permissions=85072&scope=bot%20applications.commands")
+            print("==========================================================================")
+            await self.close()
+        
         # Check that guild_id is valid
         _guild = self.get_guild(self.config['GuildID'])
         if _guild == None:
@@ -134,6 +159,86 @@ class BackstabBot(discord.Bot):
             if self.get_channel(_channel_id) == None:
                 self.log(f"ERROR: [Config] Could not find valid channel with ID: {_channel_id}", time=False)
                 await self.close()
+
+    def get_team_score_str(self, gamemode: str, score: int) -> str:
+        """Get Team Score String
+        
+        Returns a formatted string for the team's score given the current gamemode.
+        """
+        if gamemode == "conquest":
+            return f"***{self.infl.no('ticket', score)} remaining***"
+        else:
+            return f"***{self.infl.no('flag', score)} captured***"
+    
+    def get_server_status_embed(self, server_data: dict) -> discord.Embed:
+        # Get total player count
+        _player_count = server_data['playersCount']
+
+        # Setup embed color based on total player count
+        if _player_count == 0:
+            _color = discord.Colour.yellow()
+        elif _player_count == server_data['maxPlayers']:
+            _color = discord.Colour.red()
+        else:
+            _color = discord.Colour.green()
+        
+        # (DEPRECIATED) Check if server is official
+        """
+        if server_data['id'] in self.config['ServerStatus']['OfficialIDs']:
+            _description = "*Official Server*"
+        else:
+            _description = "*Unofficial Server*"
+        """
+
+        # Check match state
+        if server_data['id'] in self.game_over_ids:
+            _description = "*Match Completed*"
+        elif _player_count < self.config['PlayerStats']['MatchMinPlayers']:
+            _description = "*Waiting for Players*"
+        else:
+            _description = "*Match In-Progress*"
+        
+        # Get team players and sort by score
+        _team1 = server_data['teams'][0]['players']
+        _team2 = server_data['teams'][1]['players']
+        _team1 = sorted(_team1, key=lambda x: x['score'], reverse=True)
+        _team2 = sorted(_team2, key=lambda x: x['score'], reverse=True)
+        
+        # Setup Discord embed
+        _embed = discord.Embed(
+            title=server_data['serverName'],
+            description=_description,
+            color=_color
+        )
+        _embed.set_author(
+            name="BF2:MC Server Info", 
+            icon_url=CS.COUNTRY_FLAGS_URL.replace("<code>", server_data['country'].lower())
+        )
+        _embed.set_thumbnail(url=CS.GM_THUMBNAILS_URL.replace("<gamemode>", server_data['gameType']))
+        _embed.add_field(name="Players:", value=f"{_player_count}/{server_data['maxPlayers']}", inline=False)
+        _embed.add_field(name="Gamemode:", value=CS.GM_STRINGS[server_data['gameType']], inline=True)
+        _embed.add_field(name="Time Elapsed:", value=self.sec_to_mmss(server_data['timeElapsed']), inline=True)
+        _embed.add_field(name="Time Limit:", value=self.sec_to_mmss(server_data['timeLimit']), inline=True)
+        _embed.add_field(
+            name=CS.TEAM_STRINGS[server_data['teams'][0]['country']], 
+            value=self.get_team_score_str(server_data['gameType'], server_data['teams'][0]['score']), 
+            inline=False
+        )
+        _embed.add_field(name="Player:", value=self.get_player_attr_list_str(_team1, 'name'), inline=True)
+        _embed.add_field(name="Score:", value=self.get_player_attr_list_str(_team1, 'score'), inline=True)
+        _embed.add_field(name="Deaths:", value=self.get_player_attr_list_str(_team1, 'deaths'), inline=True)
+        _embed.add_field(
+            name=CS.TEAM_STRINGS[server_data['teams'][1]['country']],  
+            value=self.get_team_score_str(server_data['gameType'], server_data['teams'][1]['score']), 
+            inline=False
+        )
+        _embed.add_field(name="Player:", value=self.get_player_attr_list_str(_team2, 'name'), inline=True)
+        _embed.add_field(name="Score:", value=self.get_player_attr_list_str(_team2, 'score'), inline=True)
+        _embed.add_field(name="Deaths:", value=self.get_player_attr_list_str(_team2, 'deaths'), inline=True)
+        _embed.set_image(url=CS.MAP_IMAGES_URL.replace("<map_name>", server_data['mapName']))
+        _embed.set_footer(text=f"Data fetched at: {self.last_query.strftime('%I:%M:%S %p UTC')} -- {self.config['API']['HumanURL']}")
+
+        return _embed
     
     async def query_api(self) -> dict:
         """Query API
