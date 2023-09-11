@@ -68,6 +68,9 @@ class CogServerStatus(discord.Cog):
             # Skip blacklisted Server IDs
             if _s['id'] in self.bot.config['ServerStatus']['Blacklist']:
                 continue
+            # Skip broken API entry
+            if len(_s['teams']) < 2:
+                continue
             _embeds.append(self.bot.get_server_status_embed(_s))
         
         return _embeds
