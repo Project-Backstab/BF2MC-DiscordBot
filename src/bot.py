@@ -1,7 +1,7 @@
 """bot.py
 
 A subclass of `discord.Bot` that adds ease-of-use instance variables and functions (e.g. database object).
-Date: 08/27/2023
+Date: 09/10/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -100,6 +100,14 @@ class BackstabBot(discord.Bot):
         Called when the bot successfully connects to the API and becomes online.
         Excessive API calls in this function should be avoided.
         """
+        # Print invite link and close bot if it is not already in a guild
+        if len(self.guilds) < 1:
+            print("==========================================================================")
+            print("Use following link to invite bot to guild, and then restart the bot:")
+            print(f"https://discord.com/api/oauth2/authorize?client_id={self.application_id}&permissions=85072&scope=bot%20applications.commands")
+            print("==========================================================================")
+            await self.close()
+        
         # Check that guild_id is valid
         _guild = self.get_guild(self.config['GuildID'])
         if _guild == None:
