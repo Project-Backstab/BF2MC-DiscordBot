@@ -411,8 +411,8 @@ class CogPlayerStats(discord.Cog):
         The following are red flags that will trigger a warning:
         - Either team has 9 or more flags capped (CTF only)
         - Any player has 90 score or more
-        - Any team collectively has 0 score (no spawning or resistance)
-        - Any team collectively has less than 2 deaths (no spawning or resistance)
+        - Any team collectively has 0 score (no resistance / didn't spawn)
+        - Any team collectively has less than 2 deaths and more than 50 score (no resistance from enemy team)
         """
         if self.bot.config['PlayerStats']['IntegrityWarnings']['Enabled'] == False:
             return None
@@ -458,7 +458,7 @@ class CogPlayerStats(discord.Cog):
             if _t_col_score < 1:
                 await _send_warning_msg(f"Team {_t['country']} collectively didn't score any points (no resistance / didn't spawn?)")
                 return False
-            if _t_col_deaths < 2:
+            if _t_col_deaths < 2 and _t_col_score >= 50:
                 await _send_warning_msg(f"Team {_t['country']} collectively died less than 2 times (no resistance from enemy team?)")
                 return False
         
