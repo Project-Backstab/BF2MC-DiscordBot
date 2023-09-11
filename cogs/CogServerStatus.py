@@ -104,9 +104,11 @@ class CogServerStatus(discord.Cog):
         ]
         await self.bot.check_channel_ids_for_cfg_key('ServerStatus', _cfg_sub_keys)
 
+        # Get handle for server stats text channel
+        _text_channel = self.bot.get_channel(self.bot.config['ServerStatus']['ServerStatsTextChannelID'])
+
         # Get status message (if it exists) from message history (if we haven't already)
         if self.status_msg == None:
-            _text_channel = self.bot.get_channel(self.bot.config['ServerStatus']['ServerStatusTextChannelID'])
             async for _m in _text_channel.history(limit=3):
                 # Check if the message was sent by the user
                 if _m.author == self.bot.user:
@@ -118,7 +120,6 @@ class CogServerStatus(discord.Cog):
             self.StatusLoop.start()
             self.bot.log(f"[ServerStatus] StatusLoop started ({UPDATE_INTERVAL} min. interval).")
             # Set channel description if it is not correct
-            _text_channel = self.bot.get_channel(self.bot.config['ServerStatus']['ServerStatusTextChannelID'])
             _topic = f"Live server statistics (Updated every {self.bot.infl.no('second', round(UPDATE_INTERVAL*60))})"
             if _text_channel.topic != _topic:
                 await _text_channel.edit(topic=_topic)
@@ -160,15 +161,17 @@ class CogServerStatus(discord.Cog):
             await self.set_status_channel_name("unknown")
 
         ## Update stats channel post
+        # Post already exists
         if self.status_msg != None:
             try:
                 await self.status_msg.edit(f"## Total Players Online: {self.total_online}", embeds=self.get_server_status_embeds())
             except Exception as e:
                 self.bot.log("[WARNING] Unable to edit server stats message. Is the Discord API down?")
                 self.bot.log(f"Exception:\n{e}", time=False)
+        # First post needs to be made
         else:
-            _text_channel = self.bot.get_channel(self.bot.config['ServerStatus']['ServerStatusTextChannelID'])
-            await _text_channel.send(f"## Total Players Online: {self.total_online}", embeds=self.get_server_status_embeds())
+            _text_channel = self.bot.get_channel(self.bot.config['ServerStatus']['ServerStatsTextChannelID'])
+            self.status_msg = await _text_channel.send(f"## Total Players Online: {self.total_online}", embeds=self.get_server_stat_embeds())
 
 
     """Slash Command Group: /server
