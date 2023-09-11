@@ -1,7 +1,7 @@
 """CogPlayerStats.py
 
 Handles tasks related to checking player stats and info.
-Date: 09/09/2023
+Date: 09/10/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -465,6 +465,16 @@ class CogPlayerStats(discord.Cog):
             self.StatsLoop.change_interval(seconds=_config_interval)
             self.StatsLoop.start()
             self.bot.log(f"[PlayerStats] StatsLoop started ({_config_interval} sec. interval).")
+        
+        # Start PPH Drain Loop
+        if (
+            self.bot.config['PlayerStats']['PphDrain']['Enabled'] == True
+            and not self.PphDrainLoop.is_running()
+        ):
+            _config_interval = self.bot.config['PlayerStats']['PphDrain']['IntervalHrs']
+            self.PphDrainLoop.change_interval(hours=_config_interval)
+            self.PphDrainLoop.start()
+            self.bot.log(f"[PlayerStats] PphDrainLoop started ({_config_interval} hr. interval).")
     
 
     @tasks.loop(seconds=10)
@@ -552,6 +562,44 @@ class CogPlayerStats(discord.Cog):
         if self.StatsLoop.seconds != _config_interval:
             self.StatsLoop.change_interval(seconds=_config_interval)
             self.bot.log(f"[PlayerStats] Changed query interval to {self.StatsLoop.seconds} sec.")
+    
+    @tasks.loop(hours=1)
+    async def PphDrainLoop(self):
+        """Task Loop: PPH Drain Loop
+        
+        Runs every interval period, and queries database for players w/ PPH higher than
+        configured threshold and if they have not played within the configured grace period.
+        Their PPH is then drained by the configured amount and updated within the database.
+        """
+        # Return if not enabled
+        if self.bot.config['PlayerStats']['PphDrain']['Enabled'] == False:
+            return
+        # Get relevant database entries
+        _dbEntries = self.bot.db.getAll(
+            "player_stats", 
+            ["id", "nickname", "last_seen", "pph"], 
+            (
+                "pph > %s and TIMESTAMPDIFF(HOUR, last_seen, NOW()) > %s", 
+                [
+                    self.bot.config['PlayerStats']['PphDrain']['PphThreshold'],
+                    self.bot.config['PlayerStats']['PphDrain']['GracePeriodHrs']
+                ]
+            )
+        )
+        # Itterate through entries (if any)
+        if _dbEntries == None: return
+        self.bot.log("[PlayerStats] Draining PPH of the following nicknames:")
+        for _dbEntry in _dbEntries:
+            self.bot.log(f"\t{_dbEntry['nickname']} | {_dbEntry['pph']} PPH | Last Seen {_dbEntry['last_seen']}", time=False)
+            # Drain PPH using configured value
+            _drained_stats = {
+                'pph': _dbEntry['pph'] - self.bot.config['PlayerStats']['PphDrain']['DrainPerInterval']
+            }
+            # If dropped below threshold, set to threshold
+            if _drained_stats['pph'] < self.bot.config['PlayerStats']['PphDrain']['PphThreshold']:
+                _drained_stats['pph'] = self.bot.config['PlayerStats']['PphDrain']['PphThreshold']
+            # Update database
+            self.bot.db.update("player_stats", _drained_stats, [f"id={_dbEntry['id']}"])
 
 
     """Slash Command Group: /stats
