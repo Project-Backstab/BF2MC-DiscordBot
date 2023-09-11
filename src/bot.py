@@ -21,7 +21,6 @@ LOG_FILE = "BackstabBot.log"
 
 class BackstabBot(discord.Bot):
     @staticmethod
-    #get_datetime_str
     def log(msg: str, time: bool = True, file: bool = True, end: str = '\n'):
         """Custom Logging
 
