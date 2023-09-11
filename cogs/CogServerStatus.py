@@ -105,7 +105,7 @@ class CogServerStatus(discord.Cog):
         await self.bot.check_channel_ids_for_cfg_key('ServerStatus', _cfg_sub_keys)
 
         # Get handle for server stats text channel
-        _text_channel = self.bot.get_channel(self.bot.config['ServerStatus']['ServerStatsTextChannelID'])
+        _text_channel = self.bot.get_channel(self.bot.config['ServerStatus']['ServerStatusTextChannelID'])
 
         # Get status message (if it exists) from message history (if we haven't already)
         if self.status_msg == None:
@@ -170,7 +170,7 @@ class CogServerStatus(discord.Cog):
                 self.bot.log(f"Exception:\n{e}", time=False)
         # First post needs to be made
         else:
-            _text_channel = self.bot.get_channel(self.bot.config['ServerStatus']['ServerStatsTextChannelID'])
+            _text_channel = self.bot.get_channel(self.bot.config['ServerStatus']['ServerStatusTextChannelID'])
             self.status_msg = await _text_channel.send(f"## Total Players Online: {self.total_online}", embeds=self.get_server_stat_embeds())
 
 
