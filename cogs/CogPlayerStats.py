@@ -1284,7 +1284,7 @@ class CogPlayerStats(discord.Cog):
                     ("id = %s", [_dbEntry['id']])
                 )
                 self.bot.log(f'[PlayerStats] {ctx.author.name}#{ctx.author.discriminator} has removed the nickname of "{nickname}" from the blacklist.')
-                await ctx.respond(f':white_check_mark: Removed "{_escaped_nickname}" from the blacklist.', ephemeral=True)
+                await ctx.respond(f':white_check_mark: Removed "{_escaped_nickname}" from the blacklist.')
             else:
                 await ctx.respond(f':warning: Could not find "{_escaped_nickname}" in the blacklist.', ephemeral=True)
 
