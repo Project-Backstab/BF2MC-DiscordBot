@@ -1,7 +1,7 @@
 """CogPlayerStats.py
 
 Handles tasks related to checking player stats and info.
-Date: 09/10/2023
+Date: 09/11/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -351,18 +351,19 @@ class CogPlayerStats(discord.Cog):
         self.bot.log("Done.", time=False)
         return _top_player
     
-    async def record_map_stats(self, server_data: dict):
+    async def record_map_stats(self, server_data: dict) -> bool:
         """Record Map Statistics
         
         Additively records map statistics to the database given a server's JSON data.
         New records are created for first-seen maps.
+        Returns if it was successful or not.
         """
         self.bot.log(f"Recording map stats... ", end='', time=False)
 
         # Sanitize input (because I'm paranoid)
         if server_data == None or server_data['playersCount'] < self.bot.config['PlayerStats']['MatchMinPlayers']:
             self.bot.log("Failed! (Invalid server data passed)", time=False)
-            return None
+            return False
         
         # Determine if map was played on Conquest of CTF
         if server_data['gameType'] == "capturetheflag":
@@ -384,13 +385,85 @@ class CogPlayerStats(discord.Cog):
             _times_played += _dbEntry[_gamemode]
         
         # Insert or Update stat in DB
-        self.bot.db.insertOrUpdate(
-			"map_stats",
-			{"map_id": _map_id, "map_name": server_data['mapName'], _gamemode: _times_played},
-			"map_id"
-		)
+        try:
+            self.bot.db.insertOrUpdate(
+                "map_stats",
+                {"map_id": _map_id, "map_name": server_data['mapName'], _gamemode: _times_played},
+                "map_id"
+            )
+        except:
+            self.bot.log("Failed! (DB insert or update)", time=False)
+            return False
 
         self.bot.log("Done.", time=False)
+        return True
+    
+    async def check_stats_integrity(self, server_data: dict) -> bool:
+        """Check Stats Integrity
+        
+        If enabled in the config, checks final round data of a server for any suspicious stats
+        and reports them as a warning to the configured text channel.
+        Returns:
+        True == Clean
+        False == Warning
+        None == Disabled or Error
+        
+        The following are red flags that will trigger a warning:
+        - Either team has 9 or more flags capped (CTF only)
+        - Any player has 90 score or more
+        - Any team collectively has 0 score (no spawning or resistance)
+        - Any team collectively has less than 2 deaths (no spawning or resistance)
+        """
+        if self.bot.config['PlayerStats']['IntegrityWarnings']['Enabled'] == False:
+            return None
+        
+        self.bot.log(f"Checking stats integrity... ", end='', time=False)
+
+        # Sanitize input (because I'm paranoid)
+        if server_data == None:
+            self.bot.log("Failed! (Invalid server data passed)", time=False)
+            return None
+        
+        # Skip blacklisted Server IDs
+        if server_data['id'] in self.bot.config['ServerStatus']['Blacklist']:
+            self.bot.log("Blacklisted Server (Skipping).", time=False)
+            return True
+        
+        async def _send_warning_msg(reason: str):
+            """To be called by any of the flags to send the warning message"""
+            self.bot.log("Warning!", time=False)
+            _text_channel = self.bot.get_channel(
+                self.bot.config['PlayerStats']['IntegrityWarnings']['TextChannelID']
+            )
+            _msg = ":warning: **Potentially Suspicious Game**"
+            _msg += f"\n*Reason: {reason}*"
+            _embed = self.bot.get_server_status_embed(server_data)
+            await _text_channel.send(_msg, embed=_embed)
+
+        # Perform checks
+        for _t in server_data['teams']:
+            # Check flags
+            if (server_data['gameType'] == "capturetheflag" and _t['score'] >= 9):
+                await _send_warning_msg("Many flags capped")
+                return False
+            _t_col_score = 0
+            _t_col_deaths = 0
+            # Check individual player score, and total collective score & deaths
+            for _p in _t['players']:
+                if _p['score'] >= 90:
+                    await _send_warning_msg("Player with 90 pts. or more")
+                    return False
+                _t_col_score += _p['score']
+                _t_col_deaths += _p['deaths']
+            if _t_col_score < 1:
+                await _send_warning_msg(f"Team {_t['country']} collectively didn't score any points (no resistance / didn't spawn?)")
+                return False
+            if _t_col_deaths < 2:
+                await _send_warning_msg(f"Team {_t['country']} collectively died less than 2 times (no resistance from enemy team?)")
+                return False
+        
+        self.bot.log("Clean.", time=False)
+        return True
     
     def get_paginator_for_stat(self, stat: str) -> Paginator:
         """Returns a Leaderboard style Paginator for a given database stat"""
@@ -508,6 +581,8 @@ class CogPlayerStats(discord.Cog):
                             and _s_o['playersCount'] >= self.bot.config['PlayerStats']['MatchMinPlayers']
                             and _old_time >= self.bot.config['PlayerStats']['MatchMinTimeSec']
                            ):
+                            # Mark server as being in post game state
+                            self.bot.game_over_ids.append(_s_o['id'])
                             self.bot.log("[PlayerStats] A server has finished a game:")
                             self.bot.log(f"Server      : {_s_o['serverName']}", time=False)
                             # Record round stats and get top player nickname
@@ -519,6 +594,7 @@ class CogPlayerStats(discord.Cog):
                             #self.bot.log(f"Orig. Time : {_s_o['timeElapsed']} ({_old_time} sec.)", time=False, file=False) # DEBUGGING
                             #self.bot.log(f"New Time   : {_s_n['timeElapsed']} ({_new_time} sec.)", time=False, file=False)
                             await self.record_map_stats(_s_o)
+                            await self.check_stats_integrity(_s_o)
                             # Send temp message to player stats channel that stats were recorded
                             _text_channel = self.bot.get_channel(self.bot.config['PlayerStats']['PlayerStatsTextChannelID'])
                             _desc_text = f"Gamemode: *{CS.GM_STRINGS[_s_o['gameType']]}*"
@@ -537,13 +613,12 @@ class CogPlayerStats(discord.Cog):
                             _embed.set_thumbnail(url="https://upload.wikimedia.org/wikipedia/commons/0/04/Save-icon-floppy-disk-transparent-with-circle.png")
                             _embed.set_footer(text=f"Data captured at final game time of {self.bot.sec_to_mmss(_s_o['timeElapsed'])}")
                             await _text_channel.send(embed=_embed, delete_after=self.bot.config['PlayerStats']['DelStatsSavedMsgSec'])
-                            # Mark server as being in post game state
-                            self.bot.game_over_ids.append(_s_o['id'])
                         # Remove server from list if new game started
                         elif _s_o['id'] in self.bot.game_over_ids and _old_time > _new_time:
                             self.bot.log(f"[PlayerStats] \"{_s_n['serverName']}\" has started a new game on {CS.MAP_DATA[_s_n['mapName']][0]}.")
                             self.bot.game_over_ids.remove(_s_o['id'])
                         # Record player stats if game is not over & is a valid running game
+                        # (not to be confused with round stats -- this records playtime, etc.)
                         elif (_s_o['id'] not in self.bot.game_over_ids
                               and _s_o['playersCount'] >= self.bot.config['PlayerStats']['MatchMinPlayers']
                              ):
