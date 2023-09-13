@@ -1,7 +1,7 @@
 """CogPlayerStats.py
 
 Handles tasks related to checking player stats and info.
-Date: 09/11/2023
+Date: 09/12/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -411,7 +411,7 @@ class CogPlayerStats(discord.Cog):
         The following are red flags that will trigger a warning:
         - Either team has 9 or more flags capped (CTF only)
         - Any player has 90 score or more
-        - Any team collectively has 0 score (no resistance / didn't spawn)
+        - Any team collectively has 0 score and the server had active players (no resistance / didn't spawn)
         - Any team collectively has less than 2 deaths and more than 50 score (no resistance from enemy team)
         """
         if self.bot.config['PlayerStats']['IntegrityWarnings']['Enabled'] == False:
@@ -441,6 +441,10 @@ class CogPlayerStats(discord.Cog):
             await _text_channel.send(_msg, embed=_embed)
 
         # Perform checks
+        _s_col_score = 0
+        for _t in server_data['teams']:
+            for _p in _t['players']:
+                _s_col_score += _p['score']
         for _t in server_data['teams']:
             # Check flags
             if (server_data['gameType'] == "capturetheflag" and _t['score'] >= 9):
@@ -455,7 +459,7 @@ class CogPlayerStats(discord.Cog):
                     return False
                 _t_col_score += _p['score']
                 _t_col_deaths += _p['deaths']
-            if _t_col_score < 1:
+            if _t_col_score < 1 and _s_col_score >= 50:
                 await _send_warning_msg(f"Team {_t['country']} collectively didn't score any points (no resistance / didn't spawn?)")
                 return False
             if _t_col_deaths < 2 and _t_col_score >= 50:
