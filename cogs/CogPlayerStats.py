@@ -1,7 +1,7 @@
 """CogPlayerStats.py
 
 Handles tasks related to checking player stats and info.
-Date: 09/12/2023
+Date: 09/17/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -436,7 +436,7 @@ class CogPlayerStats(discord.Cog):
                 self.bot.config['PlayerStats']['IntegrityWarnings']['TextChannelID']
             )
             _msg = ":warning: **Potentially Suspicious Game**"
-            _msg += f"\n*Reason: {reason}*"
+            _msg += f"\n*Reason: ||{reason}||*"
             _embed = self.bot.get_server_status_embed(server_data)
             await _text_channel.send(_msg, embed=_embed)
 
