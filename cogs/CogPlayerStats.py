@@ -536,22 +536,22 @@ class CogPlayerStats(discord.Cog):
         ]
         await self.bot.check_channel_ids_for_cfg_key('PlayerStats', _cfg_sub_keys)
         
-        # Start Status Loop
-        if not self.StatsLoop.is_running():
-            _config_interval = self.bot.config['PlayerStats']['QueryIntervalSeconds']
-            self.StatsLoop.change_interval(seconds=_config_interval)
-            self.StatsLoop.start()
-            self.bot.log(f"[PlayerStats] StatsLoop started ({_config_interval} sec. interval).")
+        # # Start Status Loop
+        # if not self.StatsLoop.is_running():
+        #     _config_interval = self.bot.config['PlayerStats']['QueryIntervalSeconds']
+        #     self.StatsLoop.change_interval(seconds=_config_interval)
+        #     self.StatsLoop.start()
+        #     self.bot.log(f"[PlayerStats] StatsLoop started ({_config_interval} sec. interval).")
         
-        # Start PPH Drain Loop
-        if (
-            self.bot.config['PlayerStats']['PphDrain']['Enabled'] == True
-            and not self.PphDrainLoop.is_running()
-        ):
-            _config_interval = self.bot.config['PlayerStats']['PphDrain']['IntervalHrs']
-            self.PphDrainLoop.change_interval(hours=_config_interval)
-            self.PphDrainLoop.start()
-            self.bot.log(f"[PlayerStats] PphDrainLoop started ({_config_interval} hr. interval).")
+        # # Start PPH Drain Loop
+        # if (
+        #     self.bot.config['PlayerStats']['PphDrain']['Enabled'] == True
+        #     and not self.PphDrainLoop.is_running()
+        # ):
+        #     _config_interval = self.bot.config['PlayerStats']['PphDrain']['IntervalHrs']
+        #     self.PphDrainLoop.change_interval(hours=_config_interval)
+        #     self.PphDrainLoop.start()
+        #     self.bot.log(f"[PlayerStats] PphDrainLoop started ({_config_interval} hr. interval).")
     
 
     @tasks.loop(seconds=10)

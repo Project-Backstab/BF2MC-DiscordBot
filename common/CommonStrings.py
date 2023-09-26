@@ -1,12 +1,12 @@
 """CommonStrings.py
 
 Collection of commonly used public static final strings and related functions.
-Date: 08/02/2023
+Date: 09/25/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
 
-COUNTRY_FLAGS_URL = "https://stats.bf2mc.net/static/img/flags/<code>.png"
+COUNTRY_FLAGS_URL = "https://flagcdn.com/w40/<code>.png"
 LANG_FLAGS_URL = "https://www.unknown.nu/flags/images/<code>-100"
 GM_THUMBNAILS_URL = "https://raw.githubusercontent.com/lilkingjr1/backstab-discord-bot/main/assets/gamemode_thumbnails/<gamemode>.png"
 MAP_IMAGES_URL = "https://raw.githubusercontent.com/lilkingjr1/backstab-discord-bot/main/assets/map_images/<map_name>.png"
@@ -71,6 +71,17 @@ LEADERBOARD_STRINGS = {
     "playtime": "Play Time"
 }
 
+
+def get_iso3166_from_region(region_id: int) -> str:
+    if region_id == 1:
+        return "us"
+    elif region_id == 2048:
+        return "cn"
+    else:
+        return "de"
+    
+def get_country_flag_url(region_id: int) -> str:
+    return COUNTRY_FLAGS_URL.replace("<code>", get_iso3166_from_region(region_id))
 
 def get_rank_data(score: int, pph: int) -> tuple:
     """Returns rank name and image as a tuple given a score and PPH"""

@@ -1,7 +1,7 @@
 """bot.py
 
 A subclass of `discord.Bot` that adds ease-of-use instance variables and functions (e.g. database object).
-Date: 09/11/2023
+Date: 09/25/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -172,107 +172,122 @@ class BackstabBot(discord.Bot):
     
     def get_server_status_embed(self, server_data: dict) -> discord.Embed:
         # Get total player count
-        _player_count = server_data['playersCount']
+        _player_count = server_data['numplayers']
 
         # Setup embed color based on total player count
         if _player_count == 0:
             _color = discord.Colour.yellow()
-        elif _player_count == server_data['maxPlayers']:
+        elif _player_count == server_data['maxplayers']:
             _color = discord.Colour.red()
         else:
             _color = discord.Colour.green()
-        
-        # (DEPRECIATED) Check if server is official
-        """
-        if server_data['id'] in self.config['ServerStatus']['OfficialIDs']:
-            _description = "*Official Server*"
-        else:
-            _description = "*Unofficial Server*"
-        """
 
         # Check match state
-        if server_data['id'] in self.game_over_ids:
-            _description = "*Match Completed*"
-        elif _player_count < self.config['PlayerStats']['MatchMinPlayers']:
+        if _player_count < self.config['PlayerStats']['MatchMinPlayers']:
             _description = "*Waiting for Players*"
+        elif server_data['timeelapsed'] <= 0:
+            _description = "*Match Completed*"
         else:
             _description = "*Match In-Progress*"
         
         # Get team players and sort by score
-        _team1 = server_data['teams'][0]['players']
-        _team2 = server_data['teams'][1]['players']
+        _team1 = []
+        _team2 = []
+        for _p in server_data['players']:
+            if _p['team'] == 0:
+                _team1.append(_p)
+            else:
+                _team2.append(_p)
         _team1 = sorted(_team1, key=lambda x: x['score'], reverse=True)
         _team2 = sorted(_team2, key=lambda x: x['score'], reverse=True)
         
         # Setup Discord embed
         _embed = discord.Embed(
-            title=server_data['serverName'],
+            title=server_data['hostname'],
             description=_description,
             color=_color
         )
         _embed.set_author(
             name="BF2:MC Server Info", 
-            icon_url=CS.COUNTRY_FLAGS_URL.replace("<code>", server_data['country'].lower())
+            icon_url=CS.get_country_flag_url(server_data['region'])
         )
-        _embed.set_thumbnail(url=CS.GM_THUMBNAILS_URL.replace("<gamemode>", server_data['gameType']))
-        _embed.add_field(name="Players:", value=f"{_player_count}/{server_data['maxPlayers']}", inline=False)
-        _embed.add_field(name="Gamemode:", value=CS.GM_STRINGS[server_data['gameType']], inline=True)
-        _embed.add_field(name="Time Elapsed:", value=self.sec_to_mmss(server_data['timeElapsed']), inline=True)
-        _embed.add_field(name="Time Limit:", value=self.sec_to_mmss(server_data['timeLimit']), inline=True)
+        _embed.set_thumbnail(url=CS.GM_THUMBNAILS_URL.replace("<gamemode>", server_data['gametype']))
+        _embed.add_field(name="Players:", value=f"{_player_count}/{server_data['maxplayers']}", inline=False)
+        _embed.add_field(name="Gamemode:", value=CS.GM_STRINGS[server_data['gametype']], inline=True)
+        _embed.add_field(name="Time Elapsed:", value=self.sec_to_mmss(server_data['timeelapsed']), inline=True)
+        _embed.add_field(name="Time Limit:", value=self.sec_to_mmss(server_data['timelimit']), inline=True)
         _embed.add_field(
-            name=CS.TEAM_STRINGS[server_data['teams'][0]['country']], 
-            value=self.get_team_score_str(server_data['gameType'], server_data['teams'][0]['score']), 
+            name=CS.TEAM_STRINGS[server_data['team0']], 
+            value=self.get_team_score_str(server_data['gametype'], server_data['score0']), 
             inline=False
         )
         _embed.add_field(name="Player:", value=self.get_player_attr_list_str(_team1, 'name'), inline=True)
         _embed.add_field(name="Score:", value=self.get_player_attr_list_str(_team1, 'score'), inline=True)
         _embed.add_field(name="Deaths:", value=self.get_player_attr_list_str(_team1, 'deaths'), inline=True)
         _embed.add_field(
-            name=CS.TEAM_STRINGS[server_data['teams'][1]['country']],  
-            value=self.get_team_score_str(server_data['gameType'], server_data['teams'][1]['score']), 
+            name=CS.TEAM_STRINGS[server_data['team1']],  
+            value=self.get_team_score_str(server_data['gametype'], server_data['score1']), 
             inline=False
         )
         _embed.add_field(name="Player:", value=self.get_player_attr_list_str(_team2, 'name'), inline=True)
         _embed.add_field(name="Score:", value=self.get_player_attr_list_str(_team2, 'score'), inline=True)
         _embed.add_field(name="Deaths:", value=self.get_player_attr_list_str(_team2, 'deaths'), inline=True)
-        _embed.set_image(url=CS.MAP_IMAGES_URL.replace("<map_name>", server_data['mapName']))
+        _embed.set_image(url=CS.MAP_IMAGES_URL.replace("<map_name>", server_data['map']))
         _embed.set_footer(text=f"Data fetched at: {self.last_query.strftime('%I:%M:%S %p UTC')} -- {self.config['API']['HumanURL']}")
 
         return _embed
     
-    async def query_api(self) -> dict:
+    async def query_api(self, url_subfolder: str, **kwargs) -> json:
         """Query API
         
         Returns JSON after querying API URL, or None if bad response.
-        Also sets instance variables query_data and last_query.
+        Also sets instance variable last_query.
         """
-        self.log("[General] Querying API... ", end='', file=False)
 
         # DEBUGGING
         try:
-            _DEBUG = self.config['DEBUG']
+            _DEBUG = self.config[url_subfolder]
         except:
             _DEBUG = None
 
-        # Move current data to old data
-        self.old_query_data = self.cur_query_data
+        # Build URL string
+        _url = self.config['API']['EndpointURL']
+        if url_subfolder:
+            _url += f"/{url_subfolder}"
+        if kwargs:
+            _url += "?"
+            for _i, (_k, _v) in enumerate(kwargs.items()):
+                if _i > 0:
+                    _url += "&"
+                _url += f"{_k}={_v}"
 
         # Make an HTTP GET request to the API endpoint
+        self.log(f"[General] Querying API: {_url}", end='', file=False)
         if not _DEBUG:
-            _response = requests.get(self.config['API']['EndpointURL'])
+            _response = requests.get(_url)
         self.last_query = datetime.utcnow()
 
         # Check if the request was successful (status code 200 indicates success)
         if _DEBUG:
             self.reload_config()
-            self.cur_query_data = self.config['DEBUG']
-            self.log("Success (DEBUG).", time=False, file=False)
+            self.log("\tSuccess (DEBUG).", time=False, file=False)
+            return _DEBUG
         elif _response.status_code == 200:
-            self.log("Success.", time=False, file=False)
+            self.log("\tSuccess.", time=False, file=False)
             # Parse the JSON response
-            self.cur_query_data = _response.json()
+            return _response.json()
         else:
-            self.log("Failed!", time=False, file=False)
-            self.cur_query_data = None
+            self.log("\tFailed!", time=False, file=False)
+            return None
+    
+    async def cmd_query_api(self, url_subfolder: str, **kwargs) -> json:
+        """Command Query API
         
-        return self.cur_query_data
+        Same as Query API, but raises a CommandError if the query failed.
+        """
+        _query = await self.query_api(url_subfolder, **kwargs)
+        if _query == None:
+            raise commands.CommandError(
+                ":warning: There was an error retrieving this data. The BFMCspy API may be down at the moment."
+            )
+        return _query

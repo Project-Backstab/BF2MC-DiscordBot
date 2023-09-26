@@ -1,7 +1,7 @@
 """CogServerStatus.py
 
 Handles tasks related to checking server status and info.
-Date: 09/11/2023
+Date: 09/25/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -23,20 +23,18 @@ class CogServerStatus(discord.Cog):
         self.server_status = "automatic"
     
     
-    def get_server_status_embeds(self) -> list[discord.Embed]:
+    def get_server_status_embeds(self, servers: list[dict]) -> list[discord.Embed]:
         """Get Server Statistic Embeds
         
         Returns a list of Discord Embeds that each display each server's current statistics.
-        Excludes Server IDs in the config blacklist.
         """
         # Check for missing query data
-        if self.bot.cur_query_data == None:
+        if servers == None:
             _description = """
-            *The server stats API endpoint is currently down.*
+            *BFMCspy API endpoint is currently down.*
 
-            **BF2:MC servers may still be online.**
-            **We just can't display any stats at this time.**
-
+            **Game servers may still be online.**
+            **We just can't display any status at this time.**
             """
             _embed = discord.Embed(
                     title=":yellow_circle:  Server Stats Unavailable",
@@ -48,9 +46,9 @@ class CogServerStatus(discord.Cog):
             return [_embed]
         
         # Check for no servers online
-        if self.bot.cur_query_data['serversCount'] < 1:
+        if len(servers) < 1:
             _description = f"""
-            There are no BF2:MC servers currently online :cry:
+            There are no game servers currently online :cry:
             Please check <#{self.bot.config['ServerStatus']['AnnouncementTextChannelID']}> for more info.
             """
             _embed = discord.Embed(
@@ -64,13 +62,7 @@ class CogServerStatus(discord.Cog):
 
         # Default - Build server stat embeds
         _embeds = []
-        for _s in self.bot.cur_query_data['servers']:
-            # Skip blacklisted Server IDs
-            if _s['id'] in self.bot.config['ServerStatus']['Blacklist']:
-                continue
-            # Skip broken API entry
-            if len(_s['teams']) < 2:
-                continue
+        for _s in servers:
             _embeds.append(self.bot.get_server_status_embed(_s))
         
         return _embeds
@@ -129,27 +121,33 @@ class CogServerStatus(discord.Cog):
     async def StatusLoop(self):
         """Task Loop: Status Loop
         
-        Runs every interval period, references bot's latest query data, 
+        Runs every interval period, queries latest live server data, 
         updates status voice channel, and updates info text channel.
         """
-        ## Calculate total players online (excluding blacklisted servers)
-        _total_online = 0
-        if self.bot.cur_query_data != None:
-            for _s in self.bot.cur_query_data['servers']:
-                if _s['id'] not in self.bot.config['ServerStatus']['Blacklist']:
-                    _total_online += _s['playersCount']
+        ## Query API for servers
+        _servers = await self.bot.query_api("servers/live")
+
+        ## Create live server list (excluding dead and unverified servers) & calculate players online
+        _live_servers = []
+        _total_players = 0
+        if _servers != None:
+            for _server in _servers:
+                if _server['is_alive'] and _server['verified']:
+                    _live_servers.append(_server)
+                    _total_players += _server['numplayers']
         
         ## Update bot's activity if total players has changed
-        if _total_online != self.total_online:
-            self.total_online = _total_online
-            _activity = discord.Activity(type=discord.ActivityType.watching, name=f"{_total_online} Veterans online")
+        if _total_players != self.total_online:
+            self.total_online = _total_players
+            _activity = discord.Activity(type=discord.ActivityType.watching, name=f"{_total_players} Veterans online")
             await self.bot.change_presence(activity=_activity)
 
         ## Update server status channel name
         if self.server_status == "automatic":
-            if self.bot.cur_query_data == None:
+            if _servers == None:
                 await self.set_status_channel_name("unknown")
-            elif self.bot.cur_query_data['serversCount'] > 0:
+                _live_servers = None
+            elif len(_live_servers) > 0:
                 await self.set_status_channel_name("online")
             else:
                 await self.set_status_channel_name("offline")
@@ -159,19 +157,20 @@ class CogServerStatus(discord.Cog):
             await self.set_status_channel_name("offline")
         elif self.server_status == "unknown":
             await self.set_status_channel_name("unknown")
+            _live_servers = None
 
         ## Update stats channel post
         # Post already exists
         if self.status_msg != None:
             try:
-                await self.status_msg.edit(f"## Total Players Online: {self.total_online}", embeds=self.get_server_status_embeds())
+                await self.status_msg.edit(f"## Total Players Online: {self.total_online}", embeds=self.get_server_status_embeds(_live_servers))
             except Exception as e:
                 self.bot.log("[WARNING] Unable to edit server stats message. Is the Discord API down?")
                 self.bot.log(f"Exception:\n{e}", time=False)
         # First post needs to be made
         else:
             _text_channel = self.bot.get_channel(self.bot.config['ServerStatus']['ServerStatusTextChannelID'])
-            self.status_msg = await _text_channel.send(f"## Total Players Online: {self.total_online}", embeds=self.get_server_stat_embeds())
+            self.status_msg = await _text_channel.send(f"## Total Players Online: {self.total_online}", embeds=self.get_server_status_embeds(_live_servers))
 
 
     """Slash Command Group: /server
@@ -184,13 +183,19 @@ class CogServerStatus(discord.Cog):
     async def count(self, ctx):
         """Slash Command: /server count
         
-        Reports number of live BF2:MC servers (since last status check).
+        Reports number of live BF2:MC servers.
         Useful as backup if status channel has hit it's rate limit.
         """
-        if self.bot.cur_query_data != None:
-            await ctx.respond(f"Number of live BF2:MC servers: {self.bot.cur_query_data['serversCount']}", ephemeral=True)
-        else:
-            raise commands.CommandError("There was an error retrieving this data. The statistics API may be down at the moment.")
+        # Query API for servers
+        _servers = await self.bot.cmd_query_api("servers/live")
+        
+        # Count live and verified servers
+        _total_servers = 0
+        for _server in _servers:
+            if _server['is_alive'] and _server['verified']:
+                _total_servers += 1
+        
+        await ctx.respond(f"Number of live BF2:MC servers: {_total_servers}", ephemeral=True)
     
     @server.command(name = "setstatus", description="Manually set the global server status, or set it to automatically update. Only admins can do this.")
     async def setstatus(
