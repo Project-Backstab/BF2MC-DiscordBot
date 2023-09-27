@@ -1,14 +1,13 @@
 """CogServerStatus.py
 
 Handles tasks related to checking server status and info.
-Date: 09/25/2023
+Date: 09/26/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
 
 import discord
 from discord.ext import commands, tasks
-from discord.ext.pages import Paginator, Page
 import common.CommonStrings as CS
 
 

@@ -1,7 +1,7 @@
 """CogPlayerStats.py
 
 Handles tasks related to checking player stats and info.
-Date: 09/17/2023
+Date: 09/26/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -14,23 +14,17 @@ from discord.ext.pages import Paginator, Page
 import common.CommonStrings as CS
 
 
-SECONDS_PER_HOUR = 60.0 * 60.0
-
-player_playtime_data = {}
-disconnected_player_data = []
-
-
 async def get_player_nicknames(ctx: discord.AutocompleteContext):
     """Autocomplete Context: Get player nicknames
     
     Returns array of all player nicknames in the bot's database.
     """
     _dbEntries = ctx.bot.db.getAll(
-        "player_stats", 
-        ["nickname"]
+        "uniquenicks", 
+        ["uniquenick"]
     )
     if _dbEntries:
-        return [player['nickname'] for player in _dbEntries]
+        return [_player['uniquenick'] for _player in _dbEntries]
     else:
         return []
 
@@ -38,33 +32,14 @@ async def get_player_nicknames(ctx: discord.AutocompleteContext):
 class CogPlayerStats(discord.Cog):
     def __init__(self, bot):
         self.bot = bot
-        ## Setup MySQL table 'player_stats'
-        #self.bot.db.query("DROP TABLE player_stats") # DEBUGGING
+        ## Setup MySQL table 'uniquenicks'
+        #self.bot.db.query("DROP TABLE uniquenicks") # DEBUGGING
         self.bot.db.query(
-            "CREATE TABLE IF NOT EXISTS player_stats ("
-                "id INT AUTO_INCREMENT PRIMARY KEY, "
-                "pid INT DEFAULT NULL, "
-                "nickname TINYTEXT NOT NULL, "
-                "first_seen DATE NOT NULL, "
-                "last_seen TIMESTAMP DEFAULT NULL, "
-                "score INT NOT NULL, "
-                "deaths INT NOT NULL, "
-                "pph DECIMAL(5,2) UNSIGNED NOT NULL, "
-                "playtime INT UNSIGNED NOT NULL, "
-                "us_games INT NOT NULL, "
-                "ch_games INT NOT NULL, "
-                "ac_games INT NOT NULL, "
-                "eu_games INT NOT NULL, "
-                "cq_games INT NOT NULL, "
-                "cf_games INT NOT NULL, "
-                "wins INT NOT NULL, "
-                "losses INT NOT NULL, "
-                "top_player INT NOT NULL, "
-                "dis_uid BIGINT DEFAULT NULL, "
-                "color_r TINYINT UNSIGNED DEFAULT NULL, "
-                "color_g TINYINT UNSIGNED DEFAULT NULL, "
-                "color_b TINYINT UNSIGNED DEFAULT NULL, "
-                "match_history CHAR(10) DEFAULT 'NNNNNNNNNN'"
+            "CREATE TABLE IF NOT EXISTS uniquenicks ("
+                "userid INT UNSIGNED PRIMARY KEY, "
+                "profileid INT UNSIGNED NOT NULL, "
+                "uniquenick TINYTEXT NOT NULL, "
+                "nick TINYTEXT NOT NULL"
             ")"
         )
         ## Setup MySQL table 'map_stats'
@@ -75,15 +50,6 @@ class CogPlayerStats(discord.Cog):
                 "map_name TINYTEXT NOT NULL, "
                 "conquest INT DEFAULT 0, "
                 "capturetheflag INT DEFAULT 0"
-            ")"
-        )
-        ## Setup MySQL table 'player_blacklist'
-        #self.bot.db.query("DROP TABLE player_blacklist") # DEBUGGING
-        self.bot.db.query(
-            "CREATE TABLE IF NOT EXISTS player_blacklist ("
-                "id INT AUTO_INCREMENT PRIMARY KEY, "
-                "pid INT DEFAULT NULL, "
-                "nickname TINYTEXT NOT NULL"
             ")"
         )
     
@@ -105,251 +71,6 @@ class CogPlayerStats(discord.Cog):
         hours, minutes, seconds = time.split(':')
         return int(hours) * 3600 + int(minutes) * 60 + int(seconds)
     """
-    
-    async def record_player_stats(self, old_server_data: dict, new_server_data: dict):
-        """Record Player Statistics
-        
-        Takes old and new data for a single server and checks all the players in the data.
-        If a player stays connected (ie. they appear in both data sets), their playtime (based
-        on query interval) is accumulated to the `player_playtime_data` in-memory dictionary.
-        If a player disconnects (ie. they disapear from new data), they (along with their,
-        Server ID, Team ID, and Playtime) are moved to the `disconnected_players_data` in-memory list.
-        """
-        _all_old_players = old_server_data['teams'][0]['players'] + old_server_data['teams'][1]['players']
-        _all_new_players = new_server_data['teams'][0]['players'] + new_server_data['teams'][1]['players']
-        for _p_o in _all_old_players:
-            # Check if player stayed connected
-            _player_stayed = False
-            for _p_n in _all_new_players:
-                if _p_o['id'] == _p_n['id']:
-                    _player_stayed = True
-                    break
-            # Player stayed connected
-            if _player_stayed:
-                # Accumulate playtime
-                if _p_o['name'] in player_playtime_data:
-                    player_playtime_data[_p_o['name']] += self.bot.config['PlayerStats']['QueryIntervalSeconds']
-                else:
-                    #print(f"+ {_p_o['name']}") # DEBUGGING
-                    player_playtime_data[_p_o['name']] = self.bot.config['PlayerStats']['QueryIntervalSeconds']
-            # Player disconnected & participated in game
-            elif _p_o['score'] != 0 or _p_o['deaths'] != 0:
-                #print(f"- {_p_o['name']}") # DEBUGGING
-                _p_o['serverID'] = old_server_data['id']
-                if _p_o in old_server_data['teams'][0]['players']:
-                    _p_o['teamID'] = old_server_data['teams'][0]['id']
-                else:
-                    _p_o['teamID'] = old_server_data['teams'][1]['id']
-                _p_o['playtime'] = 0
-                if _p_o['name'] in player_playtime_data:
-                    _p_o['playtime'] = player_playtime_data[_p_o['name']]
-                    player_playtime_data.pop(_p_o['name'])
-                disconnected_player_data.append(_p_o)
-
-    async def record_round_stats(self, server_data: dict) -> str:
-        """Record Round Statistics
-        
-        Additively records end-round player statistics to the database given a server's JSON data.
-        New records are created for first-seen players.
-        Returns nickname string of the top player.
-        """
-        self.bot.log(f"Recording round stats... ", end='', time=False)
-
-        # Sanitize input (because I'm paranoid)
-        if server_data == None or server_data['playersCount'] < self.bot.config['PlayerStats']['MatchMinPlayers']:
-            self.bot.log("Failed! (Invalid server data passed)", time=False)
-            return None
-        
-        # Get blacklisted nicknames
-        _nickname_blacklist = []
-        _dbEntries = self.bot.db.getAll("player_blacklist", ["nickname"])
-        if _dbEntries:
-            for _dbEntry in _dbEntries:
-                _nickname_blacklist.append(_dbEntry['nickname'])
-        
-        # Calculate winning team ID (-1 = Draw)
-        _winning_team_ID = -1
-        if server_data['teams'][0]['score'] > server_data['teams'][1]['score']:
-            _winning_team_ID = server_data['teams'][0]['id']
-        elif server_data['teams'][0]['score'] < server_data['teams'][1]['score']:
-            _winning_team_ID = server_data['teams'][1]['id']
-        
-        # Calculate top player
-        _top_player = None
-        if server_data['playersCount'] >= self.bot.config['PlayerStats']['MvpMinPlayers']:
-            _all_players = server_data['teams'][0]['players'] + server_data['teams'][1]['players']
-            for _p in _all_players:
-                # Skip player if their nickname is blacklisted
-                if _p['name'] in _nickname_blacklist: continue
-                # Replace if no top player, score is higher, or score is identical and deaths are lower
-                if (_top_player == None
-                    or _p['score'] > _top_player['score']
-                    or (_p['score'] == _top_player['score'] and _p['deaths'] < _top_player['deaths'])):
-                    _top_player = _p
-            _top_player = _top_player['name']
-
-        # Add connected players' playtime data
-        for _t in server_data['teams']:
-            for _p in _t['players']:
-                try:
-                    _p['playtime'] = player_playtime_data[_p['name']]
-                    player_playtime_data.pop(_p['name'])
-                except:
-                    self.bot.log(f"\n[WARNING] \"{_p['name']}\" was not found in player playtime data! Ignoring playtime... ", time=False, end="")
-                    _p['playtime'] = 0
-
-        # Add disconnected players to server's data
-        #print(f"\nDC'd players:\n{disconnected_player_data}") # DEBUGGING
-        for _dc_p in disconnected_player_data.copy():
-            if _dc_p['serverID'] == server_data['id']:
-                for _t in server_data['teams']:
-                    if _dc_p['teamID'] == _t['id']:
-                        _t['players'].append(_dc_p)
-                        disconnected_player_data.remove(_dc_p)
-                        break
-
-        # Calculate and record stats for each player in game
-        for _t in server_data['teams']:
-            for _p in _t['players']:
-                # Skip player if their nickname is blacklisted
-                if _p['name'] in _nickname_blacklist: continue
-                # Skip player if they did not participate in the game
-                if _p['score'] == 0 and _p['deaths'] == 0: continue
-                # Find player in DB
-                _dbEntry = self.bot.db.getOne(
-                    "player_stats", 
-                    [
-                        "id",
-                        "pid",
-                        "score",
-                        "deaths",
-                        "pph",
-                        "playtime",
-                        "us_games",
-                        "ch_games",
-                        "ac_games",
-                        "eu_games",
-                        "cq_games",
-                        "cf_games",
-                        "wins",
-                        "losses",
-                        "top_player",
-                        "match_history"
-                    ], 
-                    ("nickname=%s", [_p['name']])
-                )
-                ## Sum round stats with existing player stats
-                # Copy existing DB entry for summation, or prepare a new entry for new players
-                if _dbEntry == None:
-                    _summed_stats = {
-                        "pid": None,
-                        "score": 0,
-                        "deaths": 0,
-                        "pph": 0,
-                        "playtime": 0,
-                        "us_games": 0,
-                        "ch_games": 0,
-                        "ac_games": 0,
-                        "eu_games": 0,
-                        "cq_games": 0,
-                        "cf_games": 0,
-                        "wins": 0,
-                        "losses": 0,
-                        "top_player": 0,
-                        "match_history": 'NNNNNNNNNN'
-                    }
-                else:
-                    _summed_stats = _dbEntry.copy()
-                # Add scores and deaths
-                _summed_stats['score'] += _p['score']
-                _summed_stats['deaths'] += _p['deaths']
-                # Add match result & history
-                if _winning_team_ID == _t['id']:
-                    _summed_stats['wins'] += 1
-                    _summed_stats['match_history'] = _summed_stats['match_history'][1:] + 'W'
-                elif _winning_team_ID == -1:
-                    _summed_stats['match_history'] = _summed_stats['match_history'][1:] + 'D'
-                else:
-                    _summed_stats['losses'] += 1
-                    _summed_stats['match_history'] = _summed_stats['match_history'][1:] + 'L'
-                # Add team they played for
-                _team = _t['country']
-                if _team == "US":
-                    _summed_stats['us_games'] += 1
-                elif _team == "CH":
-                    _summed_stats['ch_games'] += 1
-                elif _team == "AC":
-                    _summed_stats['ac_games'] += 1
-                else:
-                    _summed_stats['eu_games'] += 1
-                # Add gamemode they played (if they didn't disconnect [indicated by 'serverID' key])
-                if 'serverID' not in _p:
-                    if server_data['gameType'] == "capturetheflag":
-                        _summed_stats['cf_games'] += 1
-                    else:
-                        _summed_stats['cq_games'] += 1
-                # Add if they were the top player
-                if _p['name'] == _top_player:
-                    _summed_stats['top_player'] += 1
-
-                ## Calculate new PPH
-                _pph = 0.0
-                _pph_time_span_hrs = self.bot.config['PlayerStats']['PphTimeSpanHrs']
-                # Convert to hours
-                _db_time_hours = _summed_stats['playtime'] / SECONDS_PER_HOUR
-                _game_time_hours = _p['playtime'] / SECONDS_PER_HOUR
-                # Calculate total hours
-                _total_hours = _db_time_hours + _game_time_hours
-                # In case a player only played one hour (or less) total
-                if _total_hours <= 1.0:
-                    _pph = _summed_stats['score']
-                # In case a player played less then 5 hours total
-                elif _total_hours < _pph_time_span_hrs:
-                    _pph = _summed_stats['score'] / _total_hours
-                # In case a player played for more than 5 hours straight
-                elif _game_time_hours >= _pph_time_span_hrs:
-                    _pph = _p['score'] / _game_time_hours
-                # In case we have in total more then 5 hours played
-                else:
-                    """
-                    <---------------------- PPH_TIME_SPAN 5H ---------------------------------->
-                    <---------------------- gap_time_span 4H50 ---------------><-- GAME 10m --->
-                    <---------------------- gap_score  -----------------------><-- stat.score ->
-                    """
-                    # Calculate the gap for the pph time span
-                    _gap_time_span = _pph_time_span_hrs - _game_time_hours
-                    # Calculate the gap score with the database pph
-                    _gap_score = float(_summed_stats['pph']) * _gap_time_span
-                    ## Calculate new pph
-                    _pph = (_gap_score + _p['score']) / _pph_time_span_hrs
-                # Fix minimal and maximum
-                if _pph < 0:
-                    _pph = 1
-                elif _pph > 200:
-                    _pph = 200
-                _summed_stats['pph'] = _pph
-                
-                # Add playtime
-                _summed_stats['playtime'] += _p['playtime']
-
-                # Replace last-seen timestamp
-                _summed_stats['last_seen'] = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
-
-                # Add OpenSpy PID if it is missing
-                if _summed_stats['pid'] == None:
-                    _summed_stats['pid'] = _p['id']
-                
-                # Update player
-                if _dbEntry != None:
-                    self.bot.db.update("player_stats", _summed_stats, [f"id={_dbEntry['id']}"])
-                # Insert new player
-                else:
-                    _summed_stats['nickname'] = _p['name']
-                    _summed_stats['first_seen'] = datetime.now().date()
-                    self.bot.db.insert("player_stats", _summed_stats)
-        
-        self.bot.log("Done.", time=False)
-        return _top_player
     
     async def record_map_stats(self, server_data: dict) -> bool:
         """Record Map Statistics
@@ -398,76 +119,76 @@ class CogPlayerStats(discord.Cog):
         self.bot.log("Done.", time=False)
         return True
     
-    async def check_stats_integrity(self, server_data: dict) -> bool:
-        """Check Stats Integrity
+    # async def check_stats_integrity(self, server_data: dict) -> bool:
+    #     """Check Stats Integrity
         
-        If enabled in the config, checks final round data of a server for any suspicious stats
-        and reports them as a warning to the configured text channel.
-        Returns:
-        True == Clean
-        False == Warning
-        None == Disabled or Error
+    #     If enabled in the config, checks final round data of a server for any suspicious stats
+    #     and reports them as a warning to the configured text channel.
+    #     Returns:
+    #     True == Clean
+    #     False == Warning
+    #     None == Disabled or Error
         
-        The following are red flags that will trigger a warning:
-        - Either team has 9 or more flags capped (CTF only)
-        - Any player has 90 score or more
-        - Any team collectively has 0 score and the server had active players (no resistance / didn't spawn)
-        - Any team collectively has less than 2 deaths and more than 50 score (no resistance from enemy team)
-        """
-        if self.bot.config['PlayerStats']['IntegrityWarnings']['Enabled'] == False:
-            return None
+    #     The following are red flags that will trigger a warning:
+    #     - Either team has 9 or more flags capped (CTF only)
+    #     - Any player has 90 score or more
+    #     - Any team collectively has 0 score and the server had active players (no resistance / didn't spawn)
+    #     - Any team collectively has less than 2 deaths and more than 50 score (no resistance from enemy team)
+    #     """
+    #     if self.bot.config['PlayerStats']['IntegrityWarnings']['Enabled'] == False:
+    #         return None
         
-        self.bot.log(f"Checking stats integrity... ", end='', time=False)
+    #     self.bot.log(f"Checking stats integrity... ", end='', time=False)
 
-        # Sanitize input (because I'm paranoid)
-        if server_data == None:
-            self.bot.log("Failed! (Invalid server data passed)", time=False)
-            return None
+    #     # Sanitize input (because I'm paranoid)
+    #     if server_data == None:
+    #         self.bot.log("Failed! (Invalid server data passed)", time=False)
+    #         return None
         
-        # Skip blacklisted Server IDs
-        if server_data['id'] in self.bot.config['ServerStatus']['Blacklist']:
-            self.bot.log("Blacklisted Server (Skipping).", time=False)
-            return True
+    #     # Skip blacklisted Server IDs
+    #     if server_data['id'] in self.bot.config['ServerStatus']['Blacklist']:
+    #         self.bot.log("Blacklisted Server (Skipping).", time=False)
+    #         return True
         
-        async def _send_warning_msg(reason: str):
-            """To be called by any of the flags to send the warning message"""
-            self.bot.log("Warning!", time=False)
-            _text_channel = self.bot.get_channel(
-                self.bot.config['PlayerStats']['IntegrityWarnings']['TextChannelID']
-            )
-            _msg = ":warning: **Potentially Suspicious Game**"
-            _msg += f"\n*Reason: ||{reason}||*"
-            _embed = self.bot.get_server_status_embed(server_data)
-            await _text_channel.send(_msg, embed=_embed)
+    #     async def _send_warning_msg(reason: str):
+    #         """To be called by any of the flags to send the warning message"""
+    #         self.bot.log("Warning!", time=False)
+    #         _text_channel = self.bot.get_channel(
+    #             self.bot.config['PlayerStats']['IntegrityWarnings']['TextChannelID']
+    #         )
+    #         _msg = ":warning: **Potentially Suspicious Game**"
+    #         _msg += f"\n*Reason: ||{reason}||*"
+    #         _embed = self.bot.get_server_status_embed(server_data)
+    #         await _text_channel.send(_msg, embed=_embed)
 
-        # Perform checks
-        _s_col_score = 0
-        for _t in server_data['teams']:
-            for _p in _t['players']:
-                _s_col_score += _p['score']
-        for _t in server_data['teams']:
-            # Check flags
-            if (server_data['gameType'] == "capturetheflag" and _t['score'] >= 9):
-                await _send_warning_msg("Many flags capped")
-                return False
-            _t_col_score = 0
-            _t_col_deaths = 0
-            # Check individual player score, and total collective score & deaths
-            for _p in _t['players']:
-                if _p['score'] >= 90:
-                    await _send_warning_msg("Player with 90 pts. or more")
-                    return False
-                _t_col_score += _p['score']
-                _t_col_deaths += _p['deaths']
-            if _t_col_score < 1 and _s_col_score >= 50:
-                await _send_warning_msg(f"Team {_t['country']} collectively didn't score any points (no resistance / didn't spawn?)")
-                return False
-            if _t_col_deaths < 2 and _t_col_score >= 50:
-                await _send_warning_msg(f"Team {_t['country']} collectively died less than 2 times (no resistance from enemy team?)")
-                return False
+    #     # Perform checks
+    #     _s_col_score = 0
+    #     for _t in server_data['teams']:
+    #         for _p in _t['players']:
+    #             _s_col_score += _p['score']
+    #     for _t in server_data['teams']:
+    #         # Check flags
+    #         if (server_data['gameType'] == "capturetheflag" and _t['score'] >= 9):
+    #             await _send_warning_msg("Many flags capped")
+    #             return False
+    #         _t_col_score = 0
+    #         _t_col_deaths = 0
+    #         # Check individual player score, and total collective score & deaths
+    #         for _p in _t['players']:
+    #             if _p['score'] >= 90:
+    #                 await _send_warning_msg("Player with 90 pts. or more")
+    #                 return False
+    #             _t_col_score += _p['score']
+    #             _t_col_deaths += _p['deaths']
+    #         if _t_col_score < 1 and _s_col_score >= 50:
+    #             await _send_warning_msg(f"Team {_t['country']} collectively didn't score any points (no resistance / didn't spawn?)")
+    #             return False
+    #         if _t_col_deaths < 2 and _t_col_score >= 50:
+    #             await _send_warning_msg(f"Team {_t['country']} collectively died less than 2 times (no resistance from enemy team?)")
+    #             return False
         
-        self.bot.log("Clean.", time=False)
-        return True
+    #     self.bot.log("Clean.", time=False)
+    #     return True
     
     def get_paginator_for_stat(self, stat: str) -> Paginator:
         """Returns a Leaderboard style Paginator for a given database stat"""
@@ -535,155 +256,11 @@ class CogPlayerStats(discord.Cog):
             'PlayerStatsTextChannelID'
         ]
         await self.bot.check_channel_ids_for_cfg_key('PlayerStats', _cfg_sub_keys)
-        
-        # # Start Status Loop
-        # if not self.StatsLoop.is_running():
-        #     _config_interval = self.bot.config['PlayerStats']['QueryIntervalSeconds']
-        #     self.StatsLoop.change_interval(seconds=_config_interval)
-        #     self.StatsLoop.start()
-        #     self.bot.log(f"[PlayerStats] StatsLoop started ({_config_interval} sec. interval).")
-        
-        # # Start PPH Drain Loop
-        # if (
-        #     self.bot.config['PlayerStats']['PphDrain']['Enabled'] == True
-        #     and not self.PphDrainLoop.is_running()
-        # ):
-        #     _config_interval = self.bot.config['PlayerStats']['PphDrain']['IntervalHrs']
-        #     self.PphDrainLoop.change_interval(hours=_config_interval)
-        #     self.PphDrainLoop.start()
-        #     self.bot.log(f"[PlayerStats] PphDrainLoop started ({_config_interval} hr. interval).")
-    
-
-    @tasks.loop(seconds=10)
-    async def StatsLoop(self):
-        """Task Loop: Stats Loop
-        
-        Runs every interval period, queries API for new data, 
-        and records player data for any server that has finished a round.
-        """
-        ## Query API for new data
-        await self.bot.query_api()
-
-        ## Record stats
-        # Only check if old data exists (so we can compare), and current data exists (avoid errors)
-        if self.bot.old_query_data != None and self.bot.cur_query_data != None:
-            # For all existing servers...
-            for _s_o in self.bot.old_query_data['servers']:
-                _server_found = False
-                # Search all current data for matching server
-                for _s_n in self.bot.cur_query_data['servers']:
-                    # If matching server is found in new data...
-                    if _s_o['id'] == _s_n['id']:
-                        _server_found = True
-                        _old_time = _s_o['timeElapsed']
-                        _new_time = _s_n['timeElapsed']
-                        # Record old data if current time is equal to old time (indicating a game finished),
-                        # this is the first detection (times will equal until next game),
-                        # the server isn't empty, and game was at least a few sec. long.
-                        if (_old_time == _new_time 
-                            and _s_o['id'] not in self.bot.game_over_ids
-                            and _s_o['playersCount'] >= self.bot.config['PlayerStats']['MatchMinPlayers']
-                            and _old_time >= self.bot.config['PlayerStats']['MatchMinTimeSec']
-                           ):
-                            # Mark server as being in post game state
-                            self.bot.game_over_ids.append(_s_o['id'])
-                            self.bot.log("[PlayerStats] A server has finished a game:")
-                            self.bot.log(f"Server      : {_s_o['serverName']}", time=False)
-                            # Record round stats and get top player nickname
-                            _top_player = await self.record_round_stats(_s_o)
-                            self.bot.log(f"Gamemode    : {CS.GM_STRINGS[_s_o['gameType']]}", time=False)
-                            self.bot.log(f"Final Score : {_s_o['teams'][0]['score']} / {_s_o['teams'][1]['score']}", time=False)
-                            self.bot.log(f"Map         : {CS.MAP_DATA[_s_o['mapName']][0]}", time=False)
-                            self.bot.log(f"Top Player  : {_top_player}", time=False)
-                            #self.bot.log(f"Orig. Time : {_s_o['timeElapsed']} ({_old_time} sec.)", time=False, file=False) # DEBUGGING
-                            #self.bot.log(f"New Time   : {_s_n['timeElapsed']} ({_new_time} sec.)", time=False, file=False)
-                            await self.record_map_stats(_s_o)
-                            await self.check_stats_integrity(_s_o)
-                            # Send temp message to player stats channel that stats were recorded
-                            _text_channel = self.bot.get_channel(self.bot.config['PlayerStats']['PlayerStatsTextChannelID'])
-                            _desc_text = f"Gamemode: *{CS.GM_STRINGS[_s_o['gameType']]}*"
-                            _desc_text += f"\nMap: *{CS.MAP_DATA[_s_o['mapName']][0]}*"
-                            _desc_text += f"\nFinal Score: *{_s_o['teams'][0]['score']} / {_s_o['teams'][1]['score']}*"
-                            _desc_text += f"\nMVP: *{self.bot.escape_discord_formatting(_top_player)}*"
-                            _embed = discord.Embed(
-                                title="Player Stats Saved!",
-                                description=_desc_text,
-                                color=discord.Colour.green()
-                            )
-                            _embed.set_author(
-                                name=f"\"{_s_o['serverName']}\" has finished a game...", 
-                                icon_url="https://raw.githubusercontent.com/lilkingjr1/backstab-discord-bot/main/assets/icon.png"
-                            )
-                            _embed.set_thumbnail(url="https://upload.wikimedia.org/wikipedia/commons/0/04/Save-icon-floppy-disk-transparent-with-circle.png")
-                            _embed.set_footer(text=f"Data captured at final game time of {self.bot.sec_to_mmss(_s_o['timeElapsed'])}")
-                            await _text_channel.send(embed=_embed, delete_after=self.bot.config['PlayerStats']['DelStatsSavedMsgSec'])
-                        # Remove server from list if new game started
-                        elif _s_o['id'] in self.bot.game_over_ids and _old_time > _new_time:
-                            self.bot.log(f"[PlayerStats] \"{_s_n['serverName']}\" has started a new game on {CS.MAP_DATA[_s_n['mapName']][0]}.")
-                            self.bot.game_over_ids.remove(_s_o['id'])
-                        # Record player stats if game is not over & is a valid running game
-                        # (not to be confused with round stats -- this records playtime, etc.)
-                        elif (_s_o['id'] not in self.bot.game_over_ids
-                              and _s_o['playersCount'] >= self.bot.config['PlayerStats']['MatchMinPlayers']
-                             ):
-                            await self.record_player_stats(_s_o, _s_n)
-                        break
-                # If server has gone offline, record last known data
-                if not _server_found:
-                    self.bot.log(f"[PlayerStats] \"{_s_o['serverName']}\" has gone offline!")
-                    await self.record_round_stats(_s_o)
-                    # Remove server from game over list (if it happens to be in there)
-                    if _s_o['id'] in self.bot.game_over_ids:
-                        self.bot.game_over_ids.remove(_s_o['id'])
-        
-        ## Update query interval if it differs from config
-        _config_interval = self.bot.config['PlayerStats']['QueryIntervalSeconds']
-        if self.StatsLoop.seconds != _config_interval:
-            self.StatsLoop.change_interval(seconds=_config_interval)
-            self.bot.log(f"[PlayerStats] Changed query interval to {self.StatsLoop.seconds} sec.")
-    
-    @tasks.loop(hours=1)
-    async def PphDrainLoop(self):
-        """Task Loop: PPH Drain Loop
-        
-        Runs every interval period, and queries database for players w/ PPH higher than
-        configured threshold and if they have not played within the configured grace period.
-        Their PPH is then drained by the configured amount and updated within the database.
-        """
-        # Return if not enabled
-        if self.bot.config['PlayerStats']['PphDrain']['Enabled'] == False:
-            return
-        # Get relevant database entries
-        _dbEntries = self.bot.db.getAll(
-            "player_stats", 
-            ["id", "nickname", "last_seen", "pph"], 
-            (
-                "pph > %s and TIMESTAMPDIFF(HOUR, last_seen, NOW()) > %s", 
-                [
-                    self.bot.config['PlayerStats']['PphDrain']['PphThreshold'],
-                    self.bot.config['PlayerStats']['PphDrain']['GracePeriodHrs']
-                ]
-            )
-        )
-        # Itterate through entries (if any)
-        if _dbEntries == None: return
-        self.bot.log("[PlayerStats] Draining PPH of the following nicknames:")
-        for _dbEntry in _dbEntries:
-            self.bot.log(f"\t{_dbEntry['nickname']} | {_dbEntry['pph']} PPH | Last Seen {_dbEntry['last_seen']}", time=False)
-            # Drain PPH using configured value
-            _drained_stats = {
-                'pph': _dbEntry['pph'] - self.bot.config['PlayerStats']['PphDrain']['DrainPerInterval']
-            }
-            # If dropped below threshold, set to threshold
-            if _drained_stats['pph'] < self.bot.config['PlayerStats']['PphDrain']['PphThreshold']:
-                _drained_stats['pph'] = self.bot.config['PlayerStats']['PphDrain']['PphThreshold']
-            # Update database
-            self.bot.db.update("player_stats", _drained_stats, [f"id={_dbEntry['id']}"])
 
 
     """Slash Command Group: /stats
     
-    A group of commands related to checking player stats.
+    A group of commands related to checking stats.
     """
     stats = discord.SlashCommandGroup("stats", "Commands related to checking unofficial player stats")
 
