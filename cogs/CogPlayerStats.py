@@ -1,7 +1,7 @@
 """CogPlayerStats.py
 
 Handles tasks related to checking player stats and info.
-Date: 09/26/2023
+Date: 10/05/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -13,38 +13,75 @@ from discord.ext import commands, tasks
 from discord.ext.pages import Paginator, Page
 import common.CommonStrings as CS
 
+SECONDS_PER_HOUR = 60.0 * 60.0
+STATS_EPOCH_DATE_STR = "Oct. 20, 2023"
 
-async def get_player_nicknames(ctx: discord.AutocompleteContext):
-    """Autocomplete Context: Get player nicknames
+
+async def get_uniquenicks(ctx: discord.AutocompleteContext):
+    """Autocomplete Context: Get unique nicknames
     
-    Returns array of all player nicknames in the bot's database.
+    Returns array of all uniquenicks in the backend's database.
     """
-    _dbEntries = ctx.bot.db.getAll(
-        "uniquenicks", 
+    _dbEntries = ctx.bot.db_backend.getAll(
+        "Players", 
         ["uniquenick"]
     )
-    if _dbEntries:
-        return [_player['uniquenick'] for _player in _dbEntries]
-    else:
-        return []
+    if _dbEntries == None: return []
+    
+    return [_nick['uniquenick'] for _nick in _dbEntries]
+
+async def get_owned_uniquenicks(ctx: discord.AutocompleteContext):
+    """Autocomplete Context: Get owned unique nicknames
+    
+    Returns array of all uniquenicks in the backend's database.
+    (Note: Can't use `leftJoin` because of two seperate schemas)
+    """
+    # Get owned profileids
+    _dbEntries = ctx.bot.db_discord.getAll(
+        "DiscordUserLinks", 
+        ["profileid"],
+	    ("discord_uid = %s", [ctx.interaction.user.id])
+    )
+    if _dbEntries == None: return []
+
+    # Get uniquenicks from profileids
+    _ids = [str(_id['profileid']) for _id in _dbEntries]
+    _ids = ",".join(_ids) # Has to be comma seperated string for query to work
+    _dbEntries = ctx.bot.db_backend.getAll(
+        "Players",
+        ["uniquenick"],
+        (f"profileid IN ({_ids})", [])
+    )
+    if _dbEntries == None: return []
+
+    return [_nick['uniquenick'] for _nick in _dbEntries]
 
 
 class CogPlayerStats(discord.Cog):
     def __init__(self, bot):
         self.bot = bot
-        ## Setup MySQL table 'uniquenicks'
-        #self.bot.db.query("DROP TABLE uniquenicks") # DEBUGGING
-        self.bot.db.query(
-            "CREATE TABLE IF NOT EXISTS uniquenicks ("
-                "userid INT UNSIGNED PRIMARY KEY, "
-                "profileid INT UNSIGNED NOT NULL, "
-                "uniquenick TINYTEXT NOT NULL, "
-                "nick TINYTEXT NOT NULL"
+        ## Setup MySQL table 'DiscordUserLinks'
+        #self.bot.db_discord.query("DROP TABLE DiscordUserLinks") # DEBUGGING
+        self.bot.db_discord.query(
+            "CREATE TABLE IF NOT EXISTS DiscordUserLinks ("
+                "profileid INT PRIMARY KEY, "
+                "discord_uid BIGINT NOT NULL, "
+                "discord_name VARCHAR(32) NOT NULL"
+            ")"
+        )
+        ## Setup MySQL table 'ProfileCustomization'
+        #self.bot.db_discord.query("DROP TABLE ProfileCustomization") # DEBUGGING
+        self.bot.db_discord.query(
+            "CREATE TABLE IF NOT EXISTS ProfileCustomization ("
+                "profileid INT PRIMARY KEY, "
+                "color_r TINYINT UNSIGNED DEFAULT NULL, "
+                "color_g TINYINT UNSIGNED DEFAULT NULL, "
+                "color_b TINYINT UNSIGNED DEFAULT NULL"
             ")"
         )
         ## Setup MySQL table 'map_stats'
-        #self.bot.db.query("DROP TABLE map_stats") # DEBUGGING
-        self.bot.db.query(
+        #self.bot.db_discord.query("DROP TABLE map_stats") # DEBUGGING
+        self.bot.db_discord.query(
             "CREATE TABLE IF NOT EXISTS map_stats ("
                 "map_id INT PRIMARY KEY, "
                 "map_name TINYTEXT NOT NULL, "
@@ -94,7 +131,7 @@ class CogPlayerStats(discord.Cog):
         
         # Try to get map stat from DB
         _map_id = CS.MAP_DATA[server_data['mapName']][1]
-        _dbEntry = self.bot.db.getOne(
+        _dbEntry = self.bot.db_discord.getOne(
             "map_stats", 
             [_gamemode], 
             ("map_id=%s", [_map_id])
@@ -107,7 +144,7 @@ class CogPlayerStats(discord.Cog):
         
         # Insert or Update stat in DB
         try:
-            self.bot.db.insertOrUpdate(
+            self.bot.db_discord.insertOrUpdate(
                 "map_stats",
                 {"map_id": _map_id, "map_name": server_data['mapName'], _gamemode: _times_played},
                 "map_id"
@@ -194,7 +231,7 @@ class CogPlayerStats(discord.Cog):
         """Returns a Leaderboard style Paginator for a given database stat"""
         _rank = 1
         _pages = []
-        _dbEntries = self.bot.db.getAll(
+        _dbEntries = self.bot.db_discord.getAll(
             "player_stats", 
             ["nickname", stat], 
             None, 
@@ -262,9 +299,9 @@ class CogPlayerStats(discord.Cog):
     
     A group of commands related to checking stats.
     """
-    stats = discord.SlashCommandGroup("stats", "Commands related to checking unofficial player stats")
+    stats = discord.SlashCommandGroup("stats", "Commands related to checking player stats")
 
-    @stats.command(name = "player", description="Displays a specific player's unofficial BF2:MC Online stats")
+    @stats.command(name = "player", description="Displays a specific player's BF2:MC Online stats")
     @commands.cooldown(1, 180, commands.BucketType.member)
     async def player(
         self,
@@ -272,146 +309,199 @@ class CogPlayerStats(discord.Cog):
         nickname: discord.Option(
             str, 
             description="Nickname of player to look up", 
-            autocomplete=discord.utils.basic_autocomplete(get_player_nicknames), 
+            autocomplete=discord.utils.basic_autocomplete(get_uniquenicks), 
             max_length=255, 
             required=True
         )
     ):
         """Slash Command: /stats player
         
-        Displays a specific player's unofficial BF2:MC Online stats.
+        Displays a specific player's BF2:MC Online stats.
+
+        TODO / Missing:
+        Teams played
+        Gamemodes played
         """
-        _dbEntry = self.bot.db.getOne(
-            "player_stats", 
-            [
-                "id",
-                "first_seen",
-                "score",
-                "deaths",
-                "pph",
-                "playtime",
-                "us_games",
-                "ch_games",
-                "ac_games",
-                "eu_games",
-                "cq_games",
-                "cf_games",
-                "wins",
-                "losses",
-                "top_player",
-                "dis_uid",
-                "color_r",
-                "color_g",
-                "color_b",
-                "match_history"
-            ], 
-            ("nickname=%s", [nickname])
-        )
         _escaped_nickname = self.bot.escape_discord_formatting(nickname)
-        if _dbEntry:
-            _rank_data = CS.get_rank_data(_dbEntry['score'], _dbEntry['pph'])
-            _total_games = _dbEntry['cq_games'] + _dbEntry['cf_games']
-            # Determine favorite gamemode
-            _fav_gamemode = CS.GM_STRINGS['conquest'] # Default
-            if _dbEntry['cf_games'] > _dbEntry['cq_games']:
-                _fav_gamemode = CS.GM_STRINGS['capturetheflag']
-            # Determine favorite team
-            _team_games = {
-                CS.TEAM_STRINGS['US'][:-1]: _dbEntry['us_games'],
-                CS.TEAM_STRINGS['CH'][:-1]: _dbEntry['ch_games'],
-                CS.TEAM_STRINGS['AC'][:-1]: _dbEntry['ac_games'],
-                CS.TEAM_STRINGS['EU'][:-1]: _dbEntry['eu_games']
-            }
-            _fav_team = max(_team_games, key=_team_games.get)
-            # Determine earned ribbons
-            _ribbons = ""
-            if _total_games >= 50:
-                _ribbons += self.bot.config['Emoji']['Ribbons']['GamesPlayed50']
-            if _total_games >= 250:
-                _ribbons += self.bot.config['Emoji']['Ribbons']['GamesPlayed250']
-            if _total_games >= 500:
-                _ribbons += self.bot.config['Emoji']['Ribbons']['GamesPlayed500']
-            if _dbEntry['wins'] >= 5:
-                _ribbons += self.bot.config['Emoji']['Ribbons']['Victories5']
-            if _dbEntry['wins'] >= 20:
-                _ribbons += self.bot.config['Emoji']['Ribbons']['Victories20']
-            if _dbEntry['wins'] >= 50:
-                _ribbons += self.bot.config['Emoji']['Ribbons']['Victories50']
-            if _dbEntry['top_player'] >= 5:
-                _ribbons += self.bot.config['Emoji']['Ribbons']['TopPlayer5']
-            if _dbEntry['top_player'] >= 20:
-                _ribbons += self.bot.config['Emoji']['Ribbons']['TopPlayer20']
-            if _ribbons == "": _ribbons = "None"
-            # Calculate average score per game
-            if _total_games < 1: _total_games = 1 # Div. by 0 safeguard
-            _avg_score_per_game = _dbEntry['score'] / _total_games
-            _avg_score_per_game = round(_avg_score_per_game, 2)
-            # Calculate average score per life
-            _lives = _dbEntry['deaths']
-            if _lives < 1: _lives = 1 # Div. by 0 safeguard
-            _avg_score_per_life = _dbEntry['score'] / _lives
-            _avg_score_per_life = round(_avg_score_per_life, 2)
-            # Calculate win percentage
-            _win_percentage = (_dbEntry['wins'] / _total_games) * 100
-            _win_percentage = round(_win_percentage, 2)
-            _win_percentage = str(_win_percentage) + "%"
-            # Calculate play time in hours
-            _play_time = int(_dbEntry['playtime'] / SECONDS_PER_HOUR)
-            _play_time = self.bot.infl.no('hour', _play_time)
-            # Build match history string
-            _match_history = ""
-            for _c in _dbEntry['match_history']:
-                if _c == 'W':
-                    _match_history += self.bot.config['Emoji']['MatchHistory']['Win'] + " "
-                elif _c == 'L':
-                    _match_history += self.bot.config['Emoji']['MatchHistory']['Loss'] + " "
-                elif _c == 'D':
-                    _match_history += self.bot.config['Emoji']['MatchHistory']['Draw'] + " "
-            if _match_history != "":
-                _match_history = "Past ⏪ " + _match_history + "⏪ Recent"
-            else:
-                _match_history = "None"
-            # Determine embed color
-            if _dbEntry['color_r']:
-                _color = discord.Colour.from_rgb(_dbEntry['color_r'], _dbEntry['color_g'], _dbEntry['color_b'])
-            else:
-                _color = discord.Colour.random(seed=_dbEntry['id'])
-            # Set owner if applicable
-            _author_name = "BF2:MC Online  |  Player Stats"
-            _author_url = "https://raw.githubusercontent.com/lilkingjr1/backstab-discord-bot/main/assets/icon.png"
-            if _dbEntry['dis_uid']:
-                _owner = self.bot.get_user(_dbEntry['dis_uid'])
-                if _owner:
-                    _author_name = f"{_owner.display_name}'s Player Stats"
-                    _author_url = _owner.display_avatar.url
-            # Build embed
-            _embed = discord.Embed(
-                title=_escaped_nickname,
-                description=f"*{_rank_data[0]}*",
-                color=_color
+
+        ## Get player data
+        _player_data = self.bot.db_backend.leftJoin(
+            ("Players", "PlayerStats"),
+            (
+                [
+                    "profileid",
+                    "created_at",
+                    "last_login"
+                ],
+                [
+                    "score",    # Total score
+                    "ran",      # Rank
+                    "pph",      # Points per hour
+                    "kills",    # Total kills
+                    "deaths",   # Total deaths
+                    "suicides", # Total suicides
+                    "time",     # Total time played (seconds)
+                    "vehicles", # Total Vehicles destroyed
+                    "lavd",     # Total LAV's destroyed, Light Armored Vehicle  (such as a Humvee or similar)
+                    "mavd",     # Total MAV's destroyed, Medium Armored Vehicle (such as a Tank or similar)
+                    "havd",     # Total HAV's destroyed, Heavy Armored Vehicle  (such as an APC or similar)
+                    "hed`",     # Total Helicopters destroyed
+                    "bod`",     # Total Boats destoyed
+                    "k1",       # Total kills Assualt kit
+                    "s1",       # Total spawns Assualt kit
+                    "k2",       # Total kills Sniper kit
+                    "s2",       # Total spawns Sniper kit
+                    "k3",       # Total kills Special Op. kit
+                    "s3",       # Total spawns Special Op. kit
+                    "k4",       # Total kills Combat Engineer kit
+                    "s4",       # Total spawns Combat Engineer kit
+                    "k5",       # Total kills Support kit
+                    "s5",       # Total spawns Support kit
+                    "medals",   # Earned medals (byte encoded int)
+                    "ttb",      # Total times top player / MVP
+                    "mv",       # Total major victories
+                    "ngp"       # Total game sessions
+                ]
+            ),
+            ("profileid", "profileid"),
+            ("uniquenick=%s", [nickname])
+        )
+        if _player_data == None or len(_player_data) < 1:
+            return await ctx.respond(
+                f':warning: We have not seen a player by the nickname of "{_escaped_nickname}" play BF2:MC Online since {STATS_EPOCH_DATE_STR}.', 
+                ephemeral=True
             )
-            _embed.set_author(
-                name=_author_name, 
-                icon_url=_author_url
-            )
-            _embed.set_thumbnail(url=_rank_data[1])
-            _embed.add_field(name="Ribbons:", value=_ribbons, inline=False)
-            _embed.add_field(name="PPH:", value=int(_dbEntry['pph']), inline=True)
-            _embed.add_field(name="Total Score:", value=_dbEntry['score'], inline=True)
-            _embed.add_field(name="MVP:", value=self.bot.infl.no('game', _dbEntry['top_player']), inline=True)
-            _embed.add_field(name="Avg. Score/Game:", value=_avg_score_per_game, inline=True)
-            _embed.add_field(name="Avg. Score/Life:", value=_avg_score_per_life, inline=True)
-            _embed.add_field(name="Play Time:", value=_play_time, inline=True)
-            _embed.add_field(name="Total Games:", value=_total_games, inline=True)
-            _embed.add_field(name="Games Won:", value=_dbEntry['wins'], inline=True)
-            _embed.add_field(name="Win Percentage:", value=_win_percentage, inline=True)
-            _embed.add_field(name="Match Result History:", value=_match_history, inline=False)
-            _embed.add_field(name="Favorite Team:", value=_fav_team, inline=True)
-            _embed.add_field(name="Favorite Gamemode:", value=_fav_gamemode, inline=True)
-            _embed.set_footer(text=f"First seen online: {_dbEntry['first_seen'].strftime('%m/%d/%Y')} -- Unofficial data*")
-            await ctx.respond(embed=_embed)
-        else:
-            await ctx.respond(f':warning: We have not seen a player by the nickname of "{_escaped_nickname}" play BF2:MC Online since June of 2023.', ephemeral=True)
+        _player_data = _player_data[0] # Should only return one entry, so let's isolate it
+
+        ## Get Discord data (if availible)
+        _discord_data = self.bot.db_backend.leftJoin(
+            ("DiscordUserLinks", "ProfileCustomization"),
+            (
+                ["discord_uid"],
+                ["color_r", "color_g", "color_b"]
+            ),
+            ("profileid", "profileid"),
+            ("profileid=%s", [_player_data['profileid']])
+        )
+        if _discord_data != None: # Clean up result
+            if len(_discord_data) > 0:
+                _discord_data = _discord_data[0]
+            else:
+                _discord_data = None
+        
+        ## Get match history data
+        _match_history_data = self.bot.db_backend.call(
+            "queryGameStatsResults",
+            [_player_data['profileid']]
+        )
+
+        ## DEBUGGING
+        print(f"Player Data:\n{_player_data}\n")
+        print(f"Discord Data:\n{_discord_data}\n")
+        print(f"Match History:\n{_match_history_data}\n")
+        await ctx.respond("Debug info printed to console.")
+
+        # _rank_data = CS.get_rank_data(_dbEntry['score'], _dbEntry['pph'])
+        # _total_games = _dbEntry['cq_games'] + _dbEntry['cf_games']
+        # # Determine favorite gamemode
+        # _fav_gamemode = CS.GM_STRINGS['conquest'] # Default
+        # if _dbEntry['cf_games'] > _dbEntry['cq_games']:
+        #     _fav_gamemode = CS.GM_STRINGS['capturetheflag']
+        # # Determine favorite team
+        # _team_games = {
+        #     CS.TEAM_STRINGS['US'][:-1]: _dbEntry['us_games'],
+        #     CS.TEAM_STRINGS['CH'][:-1]: _dbEntry['ch_games'],
+        #     CS.TEAM_STRINGS['AC'][:-1]: _dbEntry['ac_games'],
+        #     CS.TEAM_STRINGS['EU'][:-1]: _dbEntry['eu_games']
+        # }
+        # _fav_team = max(_team_games, key=_team_games.get)
+        # # Determine earned ribbons
+        # _ribbons = ""
+        # if _total_games >= 50:
+        #     _ribbons += self.bot.config['Emoji']['Ribbons']['GamesPlayed50']
+        # if _total_games >= 250:
+        #     _ribbons += self.bot.config['Emoji']['Ribbons']['GamesPlayed250']
+        # if _total_games >= 500:
+        #     _ribbons += self.bot.config['Emoji']['Ribbons']['GamesPlayed500']
+        # if _dbEntry['wins'] >= 5:
+        #     _ribbons += self.bot.config['Emoji']['Ribbons']['Victories5']
+        # if _dbEntry['wins'] >= 20:
+        #     _ribbons += self.bot.config['Emoji']['Ribbons']['Victories20']
+        # if _dbEntry['wins'] >= 50:
+        #     _ribbons += self.bot.config['Emoji']['Ribbons']['Victories50']
+        # if _dbEntry['top_player'] >= 5:
+        #     _ribbons += self.bot.config['Emoji']['Ribbons']['TopPlayer5']
+        # if _dbEntry['top_player'] >= 20:
+        #     _ribbons += self.bot.config['Emoji']['Ribbons']['TopPlayer20']
+        # if _ribbons == "": _ribbons = "None"
+        # # Calculate average score per game
+        # if _total_games < 1: _total_games = 1 # Div. by 0 safeguard
+        # _avg_score_per_game = _dbEntry['score'] / _total_games
+        # _avg_score_per_game = round(_avg_score_per_game, 2)
+        # # Calculate average score per life
+        # _lives = _dbEntry['deaths']
+        # if _lives < 1: _lives = 1 # Div. by 0 safeguard
+        # _avg_score_per_life = _dbEntry['score'] / _lives
+        # _avg_score_per_life = round(_avg_score_per_life, 2)
+        # # Calculate win percentage
+        # _win_percentage = (_dbEntry['wins'] / _total_games) * 100
+        # _win_percentage = round(_win_percentage, 2)
+        # _win_percentage = str(_win_percentage) + "%"
+        # # Calculate play time in hours
+        # _play_time = int(_dbEntry['playtime'] / SECONDS_PER_HOUR)
+        # _play_time = self.bot.infl.no('hour', _play_time)
+        # # Build match history string
+        # _match_history = ""
+        # for _c in _dbEntry['match_history']:
+        #     if _c == 'W':
+        #         _match_history += self.bot.config['Emoji']['MatchHistory']['Win'] + " "
+        #     elif _c == 'L':
+        #         _match_history += self.bot.config['Emoji']['MatchHistory']['Loss'] + " "
+        #     elif _c == 'D':
+        #         _match_history += self.bot.config['Emoji']['MatchHistory']['Draw'] + " "
+        # if _match_history != "":
+        #     _match_history = "Past ⏪ " + _match_history + "⏪ Recent"
+        # else:
+        #     _match_history = "None"
+        # # Determine embed color
+        # if _dbEntry['color_r']:
+        #     _color = discord.Colour.from_rgb(_dbEntry['color_r'], _dbEntry['color_g'], _dbEntry['color_b'])
+        # else:
+        #     _color = discord.Colour.random(seed=_dbEntry['id'])
+        # # Set owner if applicable
+        # _author_name = "BF2:MC Online  |  Player Stats"
+        # _author_url = "https://raw.githubusercontent.com/lilkingjr1/backstab-discord-bot/main/assets/icon.png"
+        # if _dbEntry['dis_uid']:
+        #     _owner = self.bot.get_user(_dbEntry['dis_uid'])
+        #     if _owner:
+        #         _author_name = f"{_owner.display_name}'s Player Stats"
+        #         _author_url = _owner.display_avatar.url
+        # # Build embed
+        # _embed = discord.Embed(
+        #     title=_escaped_nickname,
+        #     description=f"*{_rank_data[0]}*",
+        #     color=_color
+        # )
+        # _embed.set_author(
+        #     name=_author_name, 
+        #     icon_url=_author_url
+        # )
+        # _embed.set_thumbnail(url=_rank_data[1])
+        # _embed.add_field(name="Ribbons:", value=_ribbons, inline=False)
+        # _embed.add_field(name="PPH:", value=int(_dbEntry['pph']), inline=True)
+        # _embed.add_field(name="Total Score:", value=_dbEntry['score'], inline=True)
+        # _embed.add_field(name="MVP:", value=self.bot.infl.no('game', _dbEntry['top_player']), inline=True)
+        # _embed.add_field(name="Avg. Score/Game:", value=_avg_score_per_game, inline=True)
+        # _embed.add_field(name="Avg. Score/Life:", value=_avg_score_per_life, inline=True)
+        # _embed.add_field(name="Play Time:", value=_play_time, inline=True)
+        # _embed.add_field(name="Total Games:", value=_total_games, inline=True)
+        # _embed.add_field(name="Games Won:", value=_dbEntry['wins'], inline=True)
+        # _embed.add_field(name="Win Percentage:", value=_win_percentage, inline=True)
+        # _embed.add_field(name="Match Result History:", value=_match_history, inline=False)
+        # _embed.add_field(name="Favorite Team:", value=_fav_team, inline=True)
+        # _embed.add_field(name="Favorite Gamemode:", value=_fav_gamemode, inline=True)
+        # _embed.set_footer(text=f"First seen online: {_dbEntry['first_seen'].strftime('%m/%d/%Y')} -- Unofficial data*")
+        # await ctx.respond(embed=_embed)
 
     @stats.command(name = "rankreqs", description="Displays the requirements to reach every rank")
     @commands.cooldown(1, 180, commands.BucketType.channel)
@@ -530,7 +620,7 @@ class CogPlayerStats(discord.Cog):
         if gamemode == "Capture the Flag":
             _gm_id = "capturetheflag"
         
-        _dbEntries = self.bot.db.getAll(
+        _dbEntries = self.bot.db_discord.getAll(
             "map_stats", 
             ["map_name", _gm_id], 
             None, 
@@ -573,7 +663,7 @@ class CogPlayerStats(discord.Cog):
         
         Displays the count of unique nicknames with recorded stats.
         """
-        _dbEntries = self.bot.db.getAll("player_stats", ["id"])
+        _dbEntries = self.bot.db_discord.getAll("player_stats", ["id"])
 
         _total_players = 0
         if _dbEntries != None:
@@ -581,7 +671,7 @@ class CogPlayerStats(discord.Cog):
         
         _embed = discord.Embed(
             title=f"👥︎  Total Player Count (All-Time)",
-            description=f"I have tracked **{_total_players}** unique nicknames play at least one game since June of 2023*",
+            description=f"I have tracked **{_total_players}** unique nicknames play at least one game since {STATS_EPOCH_DATE_STR}*",
             color=discord.Colour.dark_blue()
         )
         _embed.set_footer(text="*Real player count may be lower due to players having multiple accounts")
@@ -594,7 +684,7 @@ class CogPlayerStats(discord.Cog):
         
         Displays the total number of games played across all servers.
         """
-        _dbEntries = self.bot.db.getAll("map_stats", ["conquest", "capturetheflag"])
+        _dbEntries = self.bot.db_discord.getAll("map_stats", ["conquest", "capturetheflag"])
 
         _total_games = 0
         if _dbEntries != None:
@@ -622,7 +712,7 @@ class CogPlayerStats(discord.Cog):
         nickname: discord.Option(
             str, 
             description="Nickname to claim", 
-            autocomplete=discord.utils.basic_autocomplete(get_player_nicknames), 
+            autocomplete=discord.utils.basic_autocomplete(get_uniquenicks), 
             max_length=255, 
             required=True
         )
@@ -638,14 +728,14 @@ class CogPlayerStats(discord.Cog):
         Utilizes a `discord.ui.View` to verify that the caller actually wants to claim
         the nickname they specified.
         """
-        _dbEntry = self.bot.db.getOne(
+        _dbEntry = self.bot.db_discord.getOne(
             "player_stats", 
             ["id"], 
             ("dis_uid=%s", [ctx.author.id])
         )
         # Check if author already has a claimed nickname
         if not _dbEntry:
-            _dbEntry = self.bot.db.getOne(
+            _dbEntry = self.bot.db_discord.getOne(
                 "player_stats", 
                 ["id", "dis_uid"], 
                 ("nickname=%s", [nickname])
@@ -675,7 +765,7 @@ class CogPlayerStats(discord.Cog):
                     _str2 = "If you have proof that you own this nickname, please contact an admin."
                     await ctx.respond(_str1 + "\n\n" + _str2, ephemeral=True)
             else:
-                _str1 = f':warning: We have not seen the nickname of "{_escaped_nickname}" play BF2:MC Online since June of 2023.'
+                _str1 = f':warning: We have not seen the nickname of "{_escaped_nickname}" play BF2:MC Online since {STATS_EPOCH_DATE_STR}.'
                 _str2 = "(A nickname must have been used to play at least 1 game before it can be claimed)"
                 await ctx.respond(_str1 + "\n\n" + _str2, ephemeral=True)
         else:
@@ -728,7 +818,7 @@ class CogPlayerStats(discord.Cog):
         nickname: discord.Option(
             str, 
             description="Nickname you own", 
-            autocomplete=discord.utils.basic_autocomplete(get_player_nicknames), 
+            autocomplete=discord.utils.basic_autocomplete(get_uniquenicks), 
             max_length=255, 
             required=True
         ), 
@@ -758,7 +848,7 @@ class CogPlayerStats(discord.Cog):
         
         Changes the stats embed color in the database for a given nickname if the author owns said nickname.
         """
-        _dbEntry = self.bot.db.getOne(
+        _dbEntry = self.bot.db_discord.getOne(
             "player_stats", 
             ["id", "dis_uid"], 
             ("nickname=%s", [nickname])
@@ -766,7 +856,7 @@ class CogPlayerStats(discord.Cog):
         _escaped_nickname = self.bot.escape_discord_formatting(nickname)
         # Check if the author owns the nickname
         if _dbEntry and _dbEntry['dis_uid'] == ctx.author.id:
-            self.bot.db.update(
+            self.bot.db_discord.update(
                 "player_stats", 
                 {
                     "color_r": red, 
@@ -790,7 +880,7 @@ class CogPlayerStats(discord.Cog):
         nickname: discord.Option(
             str, 
             description="BF2:MC Online nickname", 
-            autocomplete=discord.utils.basic_autocomplete(get_player_nicknames), 
+            autocomplete=discord.utils.basic_autocomplete(get_uniquenicks), 
             max_length=255, 
             required=True
         )
@@ -806,7 +896,7 @@ class CogPlayerStats(discord.Cog):
             await ctx.respond(_msg, ephemeral=True)
             return
         
-        _dbEntry = self.bot.db.getOne(
+        _dbEntry = self.bot.db_discord.getOne(
             "player_stats", 
             ["id"], 
             ("nickname=%s", [nickname])
@@ -819,7 +909,7 @@ class CogPlayerStats(discord.Cog):
             if member != self.bot.user:
                 _uid = member.id
             # Update database
-            self.bot.db.update(
+            self.bot.db_discord.update(
                 "player_stats", 
                 {"dis_uid": _uid}, 
                 [f"id={_dbEntry['id']}"]
@@ -827,7 +917,7 @@ class CogPlayerStats(discord.Cog):
             self.bot.log(f'[PlayerStats] {ctx.author.name}#{ctx.author.discriminator} has assigned the nickname of "{nickname}" to {member.display_name}.')
             await ctx.respond(f':white_check_mark: {member.name} has successfully been assigned as the owner of nickname "{_escaped_nickname}"!', ephemeral=True)
         else:
-            await ctx.respond(f':warning: I have not seen a player by the nickname of "{_escaped_nickname}" play BF2:MC Online since June of 2023.', ephemeral=True)
+            await ctx.respond(f':warning: I have not seen a player by the nickname of "{_escaped_nickname}" play BF2:MC Online since {STATS_EPOCH_DATE_STR}.', ephemeral=True)
     
     @nickname.command(name = "ownedby", description="See which nicknames are owned by a given Discord member")
     @commands.cooldown(1, 60, commands.BucketType.channel)
@@ -843,7 +933,7 @@ class CogPlayerStats(discord.Cog):
         
         Displays which nicknames are owned by a given Discord member.
         """
-        _dbEntries = self.bot.db.getAll(
+        _dbEntries = self.bot.db_discord.getAll(
             "player_stats", 
             ["nickname", "first_seen", "score", "pph"], 
             ("dis_uid = %s", [member.id])
@@ -889,7 +979,7 @@ class CogPlayerStats(discord.Cog):
         nickname: discord.Option(
             str, 
             description="Nickname of player (can be nickname not currently in the database)", 
-            autocomplete=discord.utils.basic_autocomplete(get_player_nicknames), 
+            autocomplete=discord.utils.basic_autocomplete(get_uniquenicks), 
             max_length=255, 
             required=True
         )
@@ -907,11 +997,11 @@ class CogPlayerStats(discord.Cog):
             return
         
         # Get existing nickname PID (if it exists)
-        _dbPID = self.bot.db.getOne(
+        _dbPID = self.bot.db_discord.getOne(
             "player_stats", ["pid"], ("nickname=%s", [nickname])
         )
         # Get existing blacklist entry (if it exists)
-        _dbEntry = self.bot.db.getOne(
+        _dbEntry = self.bot.db_discord.getOne(
             "player_blacklist", ["id"], ("nickname=%s", [nickname])
         )
         _escaped_nickname = self.bot.escape_discord_formatting(nickname)
@@ -921,7 +1011,7 @@ class CogPlayerStats(discord.Cog):
                 _pid = None
                 if _dbPID:
                     _pid = _dbPID['pid']
-                self.bot.db.insert(
+                self.bot.db_discord.insert(
                     "player_blacklist", 
                     {"pid": _pid, "nickname": nickname}
                 )
@@ -935,7 +1025,7 @@ class CogPlayerStats(discord.Cog):
         # Remove nickname
         else:
             if _dbEntry:
-                self.bot.db.delete(
+                self.bot.db_discord.delete(
                     "player_blacklist", 
                     ("id = %s", [_dbEntry['id']])
                 )

@@ -1,7 +1,7 @@
 """bot.py
 
 A subclass of `discord.Bot` that adds ease-of-use instance variables and functions (e.g. database object).
-Date: 09/25/2023
+Date: 10/03/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -98,10 +98,19 @@ class BackstabBot(discord.Bot):
         # Database Initialization
         try:
             self.log("[Startup] Logging into MySQL database... ", end='')
-            self.db = SimpleMysql(
+            self.db_discord = SimpleMysql(
                 host=self.config['MySQL']['Host'],
                 port=self.config['MySQL']['Port'],
-                db=self.config['MySQL']['DB_Name'],
+                db=self.config['MySQL']['DiscordBot_DB_Name'],
+                user=self.config['MySQL']['User'],
+                passwd=self.config['MySQL']['Pass'],
+                autocommit=True,
+                keep_alive=True
+            )
+            self.db_backend = SimpleMysql(
+                host=self.config['MySQL']['Host'],
+                port=self.config['MySQL']['Port'],
+                db=self.config['MySQL']['Backend_DB_Name'],
                 user=self.config['MySQL']['User'],
                 passwd=self.config['MySQL']['Pass'],
                 autocommit=True,
