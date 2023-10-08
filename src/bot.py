@@ -36,7 +36,7 @@ class BackstabBot(discord.Bot):
             _timestamp += ": "
             msg = _timestamp + msg
         msg += end
-        print(msg, end='')
+        print(msg, end='', flush=True)
         if file:
             with open(LOG_FILE, 'a') as _file:
                 _file.write(msg)
@@ -273,7 +273,7 @@ class BackstabBot(discord.Bot):
         # Make an HTTP GET request to the API endpoint
         self.log(f"[General] Querying API: {_url}", end='', file=False)
         if not _DEBUG:
-            _response = requests.get(_url)
+            _response = requests.get(_url, timeout=3)
         self.last_query = datetime.utcnow()
 
         # Check if the request was successful (status code 200 indicates success)

@@ -101,6 +101,14 @@ class CogPlayerStats(discord.Cog):
             if remainder:
                 result.append(lst[-remainder:])
             return result
+
+    def get_num_medals_earned(self, earned_medals: int) -> int:
+        return bin(earned_medals)[2:].count("1")
+
+    def is_medal_earned(self, earned_medals: int, medal_name: str) -> bool:
+        if medal_name not in CS.MEDALS_DATA:
+            return False
+        return earned_medals & CS.MEDALS_DATA[medal_name][0] == CS.MEDALS_DATA[medal_name][0]
     
     """
     def time_to_sec(self, time: str) -> int:
@@ -268,7 +276,7 @@ class CogPlayerStats(discord.Cog):
                 _stats += "```"
                 _embed.add_field(name="Player:", value=_nicknames, inline=True)
                 _embed.add_field(name=f"{CS.LEADERBOARD_STRINGS[stat]}:", value=_stats, inline=True)
-                _embed.set_footer(text=f"Unofficial data* -- {self.bot.config['API']['HumanURL']}")
+                _embed.set_footer(text={self.bot.config['API']['HumanURL']})
                 _pages.append(Page(embeds=[_embed]))
         else:
             _embed = discord.Embed(
@@ -319,9 +327,9 @@ class CogPlayerStats(discord.Cog):
         Displays a specific player's BF2:MC Online stats.
 
         TODO / Missing:
-        Teams played
-        Gamemodes played
+        Teams played (waiting for game server to be updated to send this data to backend)
         """
+        # await ctx.defer() TODO
         _escaped_nickname = self.bot.escape_discord_formatting(nickname)
 
         ## Get player data
@@ -345,8 +353,8 @@ class CogPlayerStats(discord.Cog):
                     "lavd",     # Total LAV's destroyed, Light Armored Vehicle  (such as a Humvee or similar)
                     "mavd",     # Total MAV's destroyed, Medium Armored Vehicle (such as a Tank or similar)
                     "havd",     # Total HAV's destroyed, Heavy Armored Vehicle  (such as an APC or similar)
-                    "hed`",     # Total Helicopters destroyed
-                    "bod`",     # Total Boats destoyed
+                    "hed",      # Total Helicopters destroyed
+                    "bod",      # Total Boats destoyed
                     "k1",       # Total kills Assualt kit
                     "s1",       # Total spawns Assualt kit
                     "k2",       # Total kills Sniper kit
@@ -360,7 +368,7 @@ class CogPlayerStats(discord.Cog):
                     "medals",   # Earned medals (byte encoded int)
                     "ttb",      # Total times top player / MVP
                     "mv",       # Total major victories
-                    "ngp"       # Total game sessions
+                    "ngp"       # Total participated game sessions
                 ]
             ),
             ("profileid", "profileid"),
@@ -374,134 +382,351 @@ class CogPlayerStats(discord.Cog):
         _player_data = _player_data[0] # Should only return one entry, so let's isolate it
 
         ## Get Discord data (if availible)
-        _discord_data = self.bot.db_backend.leftJoin(
+        _discord_data = self.bot.db_discord.leftJoin(
             ("DiscordUserLinks", "ProfileCustomization"),
             (
                 ["discord_uid"],
                 ["color_r", "color_g", "color_b"]
             ),
             ("profileid", "profileid"),
-            ("profileid=%s", [_player_data['profileid']])
+            ("DiscordUserLinks.profileid=%s", [_player_data['profileid']])
         )
-        if _discord_data != None: # Clean up result
-            if len(_discord_data) > 0:
-                _discord_data = _discord_data[0]
-            else:
-                _discord_data = None
+        if _discord_data != None and len(_discord_data) > 0: # Clean up result
+            _discord_data = _discord_data[0]
+        else:
+            _discord_data = None
         
-        ## Get match history data
-        _match_history_data = self.bot.db_backend.call(
+        ## Get match win/lose/draw data and sort by date
+        _match_results_data = self.bot.db_backend.call(
+            # "queryPlayerWinLoseDraw", 
             "queryGameStatsResults",
+            [_player_data['profileid']]
+        )
+        _match_wld_data = self.bot.db_backend.call(
+            "queryPlayerWinLoseDraw", 
+            [_player_data['profileid']]
+        )
+
+        ## Get match gamemode data
+        _match_gamemode_data = self.bot.db_backend.call(
+            "queryPlayerGametypesPlayed",
             [_player_data['profileid']]
         )
 
         ## DEBUGGING
         print(f"Player Data:\n{_player_data}\n")
         print(f"Discord Data:\n{_discord_data}\n")
-        print(f"Match History:\n{_match_history_data}\n")
-        await ctx.respond("Debug info printed to console.")
+        print(f"Match W/L/D:\n{_match_wld_data}\n")
+        print(f"Match Gamemodes:\n{_match_gamemode_data}\n")
 
-        # _rank_data = CS.get_rank_data(_dbEntry['score'], _dbEntry['pph'])
-        # _total_games = _dbEntry['cq_games'] + _dbEntry['cf_games']
-        # # Determine favorite gamemode
-        # _fav_gamemode = CS.GM_STRINGS['conquest'] # Default
-        # if _dbEntry['cf_games'] > _dbEntry['cq_games']:
-        #     _fav_gamemode = CS.GM_STRINGS['capturetheflag']
-        # # Determine favorite team
-        # _team_games = {
-        #     CS.TEAM_STRINGS['US'][:-1]: _dbEntry['us_games'],
-        #     CS.TEAM_STRINGS['CH'][:-1]: _dbEntry['ch_games'],
-        #     CS.TEAM_STRINGS['AC'][:-1]: _dbEntry['ac_games'],
-        #     CS.TEAM_STRINGS['EU'][:-1]: _dbEntry['eu_games']
-        # }
-        # _fav_team = max(_team_games, key=_team_games.get)
-        # # Determine earned ribbons
-        # _ribbons = ""
-        # if _total_games >= 50:
-        #     _ribbons += self.bot.config['Emoji']['Ribbons']['GamesPlayed50']
-        # if _total_games >= 250:
-        #     _ribbons += self.bot.config['Emoji']['Ribbons']['GamesPlayed250']
-        # if _total_games >= 500:
-        #     _ribbons += self.bot.config['Emoji']['Ribbons']['GamesPlayed500']
-        # if _dbEntry['wins'] >= 5:
-        #     _ribbons += self.bot.config['Emoji']['Ribbons']['Victories5']
-        # if _dbEntry['wins'] >= 20:
-        #     _ribbons += self.bot.config['Emoji']['Ribbons']['Victories20']
-        # if _dbEntry['wins'] >= 50:
-        #     _ribbons += self.bot.config['Emoji']['Ribbons']['Victories50']
-        # if _dbEntry['top_player'] >= 5:
-        #     _ribbons += self.bot.config['Emoji']['Ribbons']['TopPlayer5']
-        # if _dbEntry['top_player'] >= 20:
-        #     _ribbons += self.bot.config['Emoji']['Ribbons']['TopPlayer20']
-        # if _ribbons == "": _ribbons = "None"
-        # # Calculate average score per game
-        # if _total_games < 1: _total_games = 1 # Div. by 0 safeguard
-        # _avg_score_per_game = _dbEntry['score'] / _total_games
-        # _avg_score_per_game = round(_avg_score_per_game, 2)
-        # # Calculate average score per life
-        # _lives = _dbEntry['deaths']
-        # if _lives < 1: _lives = 1 # Div. by 0 safeguard
-        # _avg_score_per_life = _dbEntry['score'] / _lives
-        # _avg_score_per_life = round(_avg_score_per_life, 2)
-        # # Calculate win percentage
-        # _win_percentage = (_dbEntry['wins'] / _total_games) * 100
-        # _win_percentage = round(_win_percentage, 2)
-        # _win_percentage = str(_win_percentage) + "%"
-        # # Calculate play time in hours
-        # _play_time = int(_dbEntry['playtime'] / SECONDS_PER_HOUR)
-        # _play_time = self.bot.infl.no('hour', _play_time)
-        # # Build match history string
-        # _match_history = ""
-        # for _c in _dbEntry['match_history']:
-        #     if _c == 'W':
-        #         _match_history += self.bot.config['Emoji']['MatchHistory']['Win'] + " "
-        #     elif _c == 'L':
-        #         _match_history += self.bot.config['Emoji']['MatchHistory']['Loss'] + " "
-        #     elif _c == 'D':
-        #         _match_history += self.bot.config['Emoji']['MatchHistory']['Draw'] + " "
-        # if _match_history != "":
-        #     _match_history = "Past ⏪ " + _match_history + "⏪ Recent"
-        # else:
-        #     _match_history = "None"
-        # # Determine embed color
-        # if _dbEntry['color_r']:
-        #     _color = discord.Colour.from_rgb(_dbEntry['color_r'], _dbEntry['color_g'], _dbEntry['color_b'])
-        # else:
-        #     _color = discord.Colour.random(seed=_dbEntry['id'])
-        # # Set owner if applicable
-        # _author_name = "BF2:MC Online  |  Player Stats"
-        # _author_url = "https://raw.githubusercontent.com/lilkingjr1/backstab-discord-bot/main/assets/icon.png"
-        # if _dbEntry['dis_uid']:
-        #     _owner = self.bot.get_user(_dbEntry['dis_uid'])
-        #     if _owner:
-        #         _author_name = f"{_owner.display_name}'s Player Stats"
-        #         _author_url = _owner.display_avatar.url
-        # # Build embed
-        # _embed = discord.Embed(
-        #     title=_escaped_nickname,
-        #     description=f"*{_rank_data[0]}*",
-        #     color=_color
-        # )
-        # _embed.set_author(
-        #     name=_author_name, 
-        #     icon_url=_author_url
-        # )
-        # _embed.set_thumbnail(url=_rank_data[1])
-        # _embed.add_field(name="Ribbons:", value=_ribbons, inline=False)
-        # _embed.add_field(name="PPH:", value=int(_dbEntry['pph']), inline=True)
-        # _embed.add_field(name="Total Score:", value=_dbEntry['score'], inline=True)
-        # _embed.add_field(name="MVP:", value=self.bot.infl.no('game', _dbEntry['top_player']), inline=True)
-        # _embed.add_field(name="Avg. Score/Game:", value=_avg_score_per_game, inline=True)
-        # _embed.add_field(name="Avg. Score/Life:", value=_avg_score_per_life, inline=True)
-        # _embed.add_field(name="Play Time:", value=_play_time, inline=True)
-        # _embed.add_field(name="Total Games:", value=_total_games, inline=True)
-        # _embed.add_field(name="Games Won:", value=_dbEntry['wins'], inline=True)
-        # _embed.add_field(name="Win Percentage:", value=_win_percentage, inline=True)
-        # _embed.add_field(name="Match Result History:", value=_match_history, inline=False)
-        # _embed.add_field(name="Favorite Team:", value=_fav_team, inline=True)
-        # _embed.add_field(name="Favorite Gamemode:", value=_fav_gamemode, inline=True)
-        # _embed.set_footer(text=f"First seen online: {_dbEntry['first_seen'].strftime('%m/%d/%Y')} -- Unofficial data*")
-        # await ctx.respond(embed=_embed)
+        ## Calculate additional data
+        _rank_data = CS.RANK_DATA[_player_data['ran'] + 1]
+        # Get number of medals and build emoji string
+        _num_medals = self.get_num_medals_earned(_player_data['medals'])
+        _medals_emoji = ""
+        for _m in CS.MEDALS_DATA:
+            if self.is_medal_earned(_player_data['medals'], _m):
+                _medals_emoji += self.bot.config['Emoji']['Medals'][_m] + " "
+        if _medals_emoji == "": _medals_emoji = "None"
+        # Determine earned ribbons
+        _num_ribbons = 0
+        _ribbons = []
+        _ribbons_emoji = ""
+        if _player_data['ngp'] >= 50:
+            _id = 'Games_Played_50'
+            _ribbons.append(_id)
+            _ribbons_emoji += self.bot.config['Emoji']['Ribbons'][_id] + " "
+            _num_ribbons += 1
+        if _player_data['ngp'] >= 250:
+            _id = 'Games_Played_250'
+            _ribbons.append(_id)
+            _ribbons_emoji += self.bot.config['Emoji']['Ribbons'][_id] + " "
+            _num_ribbons += 1
+        if _player_data['ngp'] >= 500:
+            _id = 'Games_Played_500'
+            _ribbons.append(_id)
+            _ribbons_emoji += self.bot.config['Emoji']['Ribbons'][_id] + " "
+            _num_ribbons += 1
+        if _player_data['mv'] >= 5:
+            _id = 'Major_Victories_5'
+            _ribbons.append(_id)
+            _ribbons_emoji += self.bot.config['Emoji']['Ribbons'][_id] + " "
+            _num_ribbons += 1
+        if _player_data['mv'] >= 20:
+            _id = 'Major_Victories_20'
+            _ribbons.append(_id)
+            _ribbons_emoji += self.bot.config['Emoji']['Ribbons'][_id] + " "
+            _num_ribbons += 1
+        if _player_data['mv'] >= 50:
+            _id = 'Major_Victories_50'
+            _ribbons.append(_id)
+            _ribbons_emoji += self.bot.config['Emoji']['Ribbons'][_id] + " "
+            _num_ribbons += 1
+        if _player_data['ttb'] >= 5:
+            _id = 'Top_Player_5'
+            _ribbons.append(_id)
+            _ribbons_emoji += self.bot.config['Emoji']['Ribbons'][_id] + " "
+            _num_ribbons += 1
+        if _player_data['ttb'] >= 20:
+            _id = 'Top_Player_20'
+            _ribbons.append(_id)
+            _ribbons_emoji += self.bot.config['Emoji']['Ribbons'][_id] + " "
+            _num_ribbons += 1
+        if _ribbons_emoji == "": _ribbons_emoji = "None"
+        # Calculate K/D ratio
+        if _player_data['deaths'] < 1: _player_data['deaths'] = 1 # Div. by 0 safeguard
+        _kd_ratio = _player_data['kills'] / _player_data['deaths']
+        _kd_ratio = round(_kd_ratio, 2)
+        # Calculate average score per game
+        if _player_data['ngp'] < 1: _player_data['ngp'] = 1 # Div. by 0 safeguard
+        _avg_score_per_game = _player_data['score'] / _player_data['ngp']
+        _avg_score_per_game = round(_avg_score_per_game, 2)
+        # Calculate win percentage
+        _wins = 0
+        for _m in _match_wld_data:
+            if _m[5] == "win":
+                _wins += 1
+        _win_percentage = (_wins / _player_data['ngp']) * 100
+        _win_percentage = round(_win_percentage, 2)
+        _win_percentage = str(_win_percentage) + "%"
+        # Calculate play time in hours
+        _play_time = int(_player_data['time'] / SECONDS_PER_HOUR)
+        _play_time = self.bot.infl.no('hour', _play_time)
+        # Determine favorite gamemode
+        _cq_games = 0
+        _cf_games = 0
+        for _m in _match_gamemode_data:
+            if _m[0] == 1:
+                _cf_games += 1
+            else:
+                _cq_games += 1
+        _fav_gamemode = CS.GM_STRINGS['conquest'] # Default
+        if _cf_games > _cq_games:
+            _fav_gamemode = CS.GM_STRINGS['capturetheflag']
+        # Determine favorite kit
+        _kit_spawns = {
+            "Assualt":          _player_data['s1'],
+            "Sniper":           _player_data['s2'],
+            "Special Op.":      _player_data['s3'],
+            "Combat Engineer":  _player_data['s4'],
+            "Support":          _player_data['s5']
+        }
+        _fav_kit = max(_kit_spawns, key=lambda k: _kit_spawns[k])
+        # Build match history string
+        _match_history = ""
+        for _m in _match_results_data:
+            if _m[4] == 'win':
+                _match_history += self.bot.config['Emoji']['MatchHistory']['Win'] + " "
+            elif _m[4] == 'lose':
+                _match_history += self.bot.config['Emoji']['MatchHistory']['Loss'] + " "
+            elif _m[4] == 'draw':
+                _match_history += self.bot.config['Emoji']['MatchHistory']['Draw'] + " "
+        if _match_history != "":
+            _match_history = "Past ⏪ " + _match_history + "⏪ Recent"
+        else:
+            _match_history = "None"
+        # Determine embed color
+        if _discord_data and _discord_data['color_r']:
+            _color = discord.Colour.from_rgb(_discord_data['color_r'], _discord_data['color_g'], _discord_data['color_b'])
+        else:
+            _color = discord.Colour.random(seed=_player_data['profileid'])
+        # Set owner if applicable
+        _author_name = "BF2:MC Online  |  Player Stats"
+        _author_url = "https://raw.githubusercontent.com/lilkingjr1/backstab-discord-bot/main/assets/icon.png"
+        if _discord_data:
+            _owner = self.bot.get_user(_discord_data['discord_uid'])
+            if _owner:
+                _author_name = f"{_owner.display_name}'s Player Stats"
+                _author_url = _owner.display_avatar.url
+        
+        ## Build embeds/pages
+        _embeds = {}
+        _select_options = []
+        # Summary
+        _title = "Summary"
+        _e_summary = discord.Embed(
+            title=_escaped_nickname,
+            description=f"***{_rank_data[0]}***",
+            color=_color
+        )
+        _e_summary.set_author(
+            name=_author_name, 
+            icon_url=_author_url
+        )
+        _e_summary.set_thumbnail(url=_rank_data[1])
+        _e_summary.add_field(name="Medals:", value=_medals_emoji, inline=False)
+        _e_summary.add_field(name="Ribbons:", value=_ribbons_emoji, inline=False)
+        _e_summary.add_field(name="PPH:", value=int(_player_data['pph']), inline=True)
+        _e_summary.add_field(name="Total Score:", value=_player_data['score'], inline=True)
+        _e_summary.add_field(name="Medals:", value=_num_medals, inline=True)
+        _e_summary.add_field(name="Match Result History:", value=_match_history, inline=False)
+        _e_summary.add_field(name="Last Seen Online:", value=_player_data['last_login'].strftime('%m/%d/%Y'), inline=False)
+        _e_summary.set_footer(text=f"First seen online: {_player_data['created_at'].strftime('%m/%d/%Y')} -- BFMCspy Official Stats")
+        _embeds[_title] = _e_summary
+        _select_options.append(
+            discord.SelectOption(
+                label=_title,
+                description="General overview of stats",
+                emoji="📊"
+            )
+        )
+        # Stats Details
+        _title = "Stats Details"
+        _desc = f"***{_rank_data[0]}***"
+        _desc += f"\n### {_title}:"
+        _e_details = discord.Embed(
+            title=_escaped_nickname,
+            description=_desc,
+            color=_color
+        )
+        _e_details.set_author(
+            name=_author_name, 
+            icon_url=_author_url
+        )
+        _e_details.set_thumbnail(url=_rank_data[1])
+        _e_details.add_field(name="Kills:", value=_player_data['kills'], inline=True)
+        _e_details.add_field(name="Deaths:", value=_player_data['deaths'], inline=True)
+        _e_details.add_field(name="Suicides:", value=_player_data['suicides'], inline=True)
+        _e_details.add_field(name="K/D Ratio:", value=_kd_ratio, inline=True)
+        _e_details.add_field(name="Avg. Score/Game:", value=_avg_score_per_game, inline=True)
+        _e_details.add_field(name="Play Time:", value=_play_time, inline=True)
+        _e_details.add_field(name="MVP:", value=self.bot.infl.no('game', _player_data['ttb']), inline=True)
+        _e_details.add_field(name="Total Games:", value=_player_data['ngp'], inline=True)
+        _e_details.add_field(name="Win Percentage:", value=_win_percentage, inline=True)
+        _e_details.add_field(name="Favorite Gamemode:", value=_fav_gamemode, inline=True)
+        _e_details.set_footer(text=f"First seen online: {_player_data['created_at'].strftime('%m/%d/%Y')} -- BFMCspy Official Stats")
+        _embeds[_title] = _e_details
+        _select_options.append(
+            discord.SelectOption(
+                label=_title,
+                description="Additional detailed stats",
+                emoji="📈"
+            )
+        )
+        # Medals
+        _title = "Medals"
+        _desc = f"***{_rank_data[0]}***"
+        _desc += f"\n### {_title} Earned: {_num_medals}"
+        _e_medals = discord.Embed(
+            title=_escaped_nickname,
+            description=_desc,
+            color=_color
+        )
+        _e_medals.set_author(
+            name=_author_name, 
+            icon_url=_author_url
+        )
+        _e_medals.set_thumbnail(url=_rank_data[1])
+        for _m in CS.MEDALS_DATA:
+            if self.is_medal_earned(_player_data['medals'], _m):
+                _e_medals.add_field(
+                    name=f"{self.bot.config['Emoji']['Medals'][_m]} {CS.MEDALS_DATA[_m][1]}:", 
+                    value=CS.MEDALS_DATA[_m][2], 
+                    inline=False
+                )
+        _e_medals.set_footer(text="BFMCspy Official Stats")
+        _embeds[_title] = _e_medals
+        _emoji = self.bot.config['Emoji']['Medals']['Expert_Shooting']
+        _emoji = _emoji.split(":")[2][:-1]
+        _emoji = await ctx.guild.fetch_emoji(_emoji)
+        _select_options.append(
+            discord.SelectOption(
+                label=_title,
+                description="All medals earned",
+                emoji=_emoji
+            )
+        )
+        # Ribbons
+        _title = "Ribbons"
+        _desc = f"***{_rank_data[0]}***"
+        _desc += f"\n### {_title} Earned: {_num_ribbons}"
+        _e_ribbons = discord.Embed(
+            title=_escaped_nickname,
+            description=_desc,
+            color=_color
+        )
+        _e_ribbons.set_author(
+            name=_author_name, 
+            icon_url=_author_url
+        )
+        _e_ribbons.set_thumbnail(url=_rank_data[1])
+        for _r in _ribbons:
+            _e_ribbons.add_field(
+                name=f"{self.bot.config['Emoji']['Ribbons'][_r]} {CS.RIBBONS_DATA[_r][0]}:", 
+                value=CS.RIBBONS_DATA[_r][1], 
+                inline=False
+            )
+        _e_ribbons.set_footer(text="BFMCspy Official Stats")
+        _embeds[_title] = _e_ribbons
+        _emoji = self.bot.config['Emoji']['Ribbons']['Games_Played_50']
+        _emoji = _emoji.split(":")[2][:-1]
+        _emoji = await ctx.guild.fetch_emoji(_emoji)
+        _select_options.append(
+            discord.SelectOption(
+                label=_title,
+                description="All ribbons earned",
+                emoji=_emoji
+            )
+        )
+        # Vehicles Destroyed
+        _title = "Vehicles Destroyed"
+        _desc = f"***{_rank_data[0]}***"
+        _desc += f"\n### {_title}: {_player_data['vehicles']}"
+        _e_vehicles = discord.Embed(
+            title=_escaped_nickname,
+            description=_desc,
+            color=_color
+        )
+        _e_vehicles.set_author(
+            name=_author_name, 
+            icon_url=_author_url
+        )
+        _e_vehicles.set_thumbnail(url=_rank_data[1])
+        _e_vehicles.add_field(name="LAVs:", value=_player_data['lavd'], inline=True)
+        _e_vehicles.add_field(name="MAVs:", value=_player_data['mavd'], inline=True)
+        _e_vehicles.add_field(name="HAVs:", value=_player_data['havd'], inline=True)
+        _e_vehicles.add_field(name="Helicopters:", value=_player_data['hed'], inline=True)
+        _e_vehicles.add_field(name="Boats:", value=_player_data['bod'], inline=True)
+        _e_vehicles.set_footer(text="BFMCspy Official Stats")
+        _embeds[_title] = _e_vehicles
+        _select_options.append(
+            discord.SelectOption(
+                label=_title,
+                description="Different types of vehicles destroyed",
+                emoji="🚁"
+            )
+        )
+        # Kit Stats
+        _title = "Kit Stats"
+        _desc = f"***{_rank_data[0]}***"
+        _desc += f"\n### {_title}:"
+        _e_kits = discord.Embed(
+            title=_escaped_nickname,
+            description=_desc,
+            color=_color
+        )
+        _e_kits.set_author(
+            name=_author_name, 
+            icon_url=_author_url
+        )
+        _e_kits.set_thumbnail(url=_rank_data[1])
+        _e_kits.add_field(name="Favorite Kit:", value=_fav_kit, inline=False)
+        _e_kits.add_field(name="Assult Kills:", value=_player_data['lavd'], inline=True)
+        _e_kits.add_field(name="Sniper Kills:", value=_player_data['mavd'], inline=True)
+        _e_kits.add_field(name="Special Op. Kills:", value=_player_data['havd'], inline=True)
+        _e_kits.add_field(name="Combat Engineer Kills:", value=_player_data['hed'], inline=True)
+        _e_kits.add_field(name="Support Kills:", value=_player_data['bod'], inline=True)
+        _e_kits.set_footer(text="BFMCspy Official Stats")
+        _embeds[_title] = _e_kits
+        _select_options.append(
+            discord.SelectOption(
+                label=_title,
+                description="Various kit statistics",
+                emoji="🎒"
+            )
+        )
+
+        await ctx.respond(embed=_embeds["Summary"], view=PlayerStatsView(_select_options, _embeds))
 
     @stats.command(name = "rankreqs", description="Displays the requirements to reach every rank")
     @commands.cooldown(1, 180, commands.BucketType.channel)
@@ -542,54 +767,54 @@ class CogPlayerStats(discord.Cog):
     
     A sub-group of commands related to checking the leaderboard for various player stats.
     """
-    leaderboard = stats.create_subgroup("leaderboard", "Commands related to checking the unofficial leaderboard for various player stats")
+    leaderboard = stats.create_subgroup("leaderboard", "Commands related to checking the  leaderboard for various player stats")
 
-    @leaderboard.command(name = "score", description="See an unofficial leaderboard of the top scoring players of BF2:MC Online")
+    @leaderboard.command(name = "score", description="See a leaderboard of the top scoring players of BF2:MC Online")
     @commands.cooldown(1, 180, commands.BucketType.channel)
     async def score(self, ctx):
         """Slash Command: /stats leaderboard score
         
-        Displays an unofficial leaderboard of the top scoring players of BF2:MC Online.
+        Displays a leaderboard of the top scoring players of BF2:MC Online.
         """
         paginator = self.get_paginator_for_stat('score')
         await paginator.respond(ctx.interaction)
 
-    @leaderboard.command(name = "wins", description="See an unofficial leaderboard of the top winning players of BF2:MC Online")
+    @leaderboard.command(name = "wins", description="See a leaderboard of the top winning players of BF2:MC Online")
     @commands.cooldown(1, 180, commands.BucketType.channel)
     async def wins(self, ctx):
         """Slash Command: /stats leaderboard wins
         
-        Displays an unofficial leaderboard of the top winning players of BF2:MC Online.
+        Displays a leaderboard of the top winning players of BF2:MC Online.
         """
         paginator = self.get_paginator_for_stat('wins')
         await paginator.respond(ctx.interaction)
 
-    @leaderboard.command(name = "mvp", description="See an unofficial leaderboard of players who were MVP in their games of BF2:MC Online")
+    @leaderboard.command(name = "mvp", description="See a leaderboard of players who were MVP in their games of BF2:MC Online")
     @commands.cooldown(1, 180, commands.BucketType.channel)
     async def mvp(self, ctx):
         """Slash Command: /stats leaderboard mvp
         
-        Displays an unofficial leaderboard of players who were MVP in their games of BF2:MC Online.
+        Displays a leaderboard of players who were MVP in their games of BF2:MC Online.
         """
         paginator = self.get_paginator_for_stat('top_player')
         await paginator.respond(ctx.interaction)
 
-    @leaderboard.command(name = "pph", description="See an unofficial leaderboard of players with the most points earned per hour on BF2:MC Online")
+    @leaderboard.command(name = "pph", description="See a leaderboard of players with the most points earned per hour on BF2:MC Online")
     @commands.cooldown(1, 180, commands.BucketType.channel)
     async def pph(self, ctx):
         """Slash Command: /stats leaderboard pph
         
-        Displays an unofficial leaderboard of players with the most points earned per hour on BF2:MC Online.
+        Displays a leaderboard of players with the most points earned per hour on BF2:MC Online.
         """
         paginator = self.get_paginator_for_stat('pph')
         await paginator.respond(ctx.interaction)
 
-    @leaderboard.command(name = "playtime", description="See an unofficial leaderboard of players with the most hours played on BF2:MC Online")
+    @leaderboard.command(name = "playtime", description="See a leaderboard of players with the most hours played on BF2:MC Online")
     @commands.cooldown(1, 180, commands.BucketType.channel)
     async def playtime(self, ctx):
         """Slash Command: /stats leaderboard playtime
         
-        Displays an unofficial leaderboard of players with the most hours played on BF2:MC Online.
+        Displays a leaderboard of players with the most hours played on BF2:MC Online.
         """
         paginator = self.get_paginator_for_stat('playtime')
         await paginator.respond(ctx.interaction)
@@ -1033,6 +1258,29 @@ class CogPlayerStats(discord.Cog):
                 await ctx.respond(f':white_check_mark: Removed "{_escaped_nickname}" from the blacklist.')
             else:
                 await ctx.respond(f':warning: Could not find "{_escaped_nickname}" in the blacklist.', ephemeral=True)
+
+
+class PlayerStatsView(discord.ui.View):
+    """TODO
+    
+    """
+    def __init__(self, select_options: list[discord.SelectOption], embeds: dict):
+        super().__init__()
+        self.embeds = embeds
+        self.select_callback.placeholder = select_options[0].label
+        self.select_callback.options = select_options
+    
+    @discord.ui.select(
+        min_values = 1,
+        max_values = 1
+    )
+    async def select_callback(self, select, interaction): # the function called when the user is done selecting options
+        select.placeholder = select.values[0]
+        await interaction.response.edit_message(
+            embed=self.embeds[select.values[0]], 
+            view=self
+        )
+
 
 def setup(bot):
     """Called by Pycord to setup the cog"""
