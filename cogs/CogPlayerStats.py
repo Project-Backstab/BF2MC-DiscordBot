@@ -1,7 +1,7 @@
 """CogPlayerStats.py
 
 Handles tasks related to checking player stats and info.
-Date: 10/05/2023
+Date: 10/08/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -65,8 +65,7 @@ class CogPlayerStats(discord.Cog):
         self.bot.db_discord.query(
             "CREATE TABLE IF NOT EXISTS DiscordUserLinks ("
                 "profileid INT PRIMARY KEY, "
-                "discord_uid BIGINT NOT NULL, "
-                "discord_name VARCHAR(32) NOT NULL"
+                "discord_uid BIGINT NOT NULL"
             ")"
         )
         ## Setup MySQL table 'ProfileCustomization'
@@ -116,6 +115,58 @@ class CogPlayerStats(discord.Cog):
         hours, minutes, seconds = time.split(':')
         return int(hours) * 3600 + int(minutes) * 60 + int(seconds)
     """
+    
+    def get_paginator_for_stat(self, stat: str) -> Paginator:
+        """Returns a Leaderboard style Paginator for a given database stat"""
+        _rank = 1
+        _pages = []
+        _dbEntries = self.bot.db_discord.getAll(
+            "player_stats", 
+            ["nickname", stat], 
+            None, 
+            [stat, "DESC"], # Order highest first
+            [0, 50] # Limit to top 50 players
+        )
+        if _dbEntries:
+            _dbEntries = self.split_list(_dbEntries, 10) # Split into pages of 10 entries each
+            for _page in _dbEntries:
+                _embed = discord.Embed(
+                    title=f":first_place:  BF2:MC Online | Top {CS.LEADERBOARD_STRINGS[stat]} Leaderboard  :first_place:",
+                    description=f"*Top 50 players across all servers.*",
+                    color=discord.Colour.gold()
+                )
+                _nicknames = "```\n"
+                _stats = "```\n"
+                for _e in _page:
+                    _rank_str = f"#{_rank}"
+                    _nicknames += f"{_rank_str.ljust(3)} | {_e['nickname']}\n"
+                    if stat == 'score':
+                        _stats += f"{str(_e[stat]).rjust(6)} pts.\n"
+                    elif stat == 'wins':
+                        _stats += f" {self.bot.infl.no('game', _e[stat])} won\n"
+                    elif stat == 'top_player':
+                        _stats += f" {self.bot.infl.no('game', _e[stat])}\n"
+                    elif stat == 'pph':
+                        _stats += f"{str(int(_e[stat])).rjust(4)} PPH\n"
+                    elif stat == 'playtime':
+                        _stats += f"{str(int(_e[stat]/SECONDS_PER_HOUR)).rjust(5)} hrs.\n"
+                    else:
+                        _stats += "\n"
+                    _rank += 1
+                _nicknames += "```"
+                _stats += "```"
+                _embed.add_field(name="Player:", value=_nicknames, inline=True)
+                _embed.add_field(name=f"{CS.LEADERBOARD_STRINGS[stat]}:", value=_stats, inline=True)
+                _embed.set_footer(text={self.bot.config['API']['HumanURL']})
+                _pages.append(Page(embeds=[_embed]))
+        else:
+            _embed = discord.Embed(
+                title=f":first_place:  BF2:MC Online | Top {CS.LEADERBOARD_STRINGS[stat]} Leaderboard*  :first_place:",
+                description="No stats yet.",
+                color=discord.Colour.gold()
+            )
+            _pages = [Page(embeds=[_embed])]
+        return Paginator(pages=_pages, author_check=False)
     
     async def record_map_stats(self, server_data: dict) -> bool:
         """Record Map Statistics
@@ -234,58 +285,54 @@ class CogPlayerStats(discord.Cog):
         
     #     self.bot.log("Clean.", time=False)
     #     return True
-    
-    def get_paginator_for_stat(self, stat: str) -> Paginator:
-        """Returns a Leaderboard style Paginator for a given database stat"""
-        _rank = 1
-        _pages = []
-        _dbEntries = self.bot.db_discord.getAll(
-            "player_stats", 
-            ["nickname", stat], 
-            None, 
-            [stat, "DESC"], # Order highest first
-            [0, 50] # Limit to top 50 players
+
+    async def check_legacy_uniquenick(self, uniquenick: str) -> bool:
+        """Check Legacy Unique Nickname
+        
+        If a uniquenick does not have a current registered owner, but did have
+        a legacy owner, assign the legacy owner, colors (if applicable), and
+        legacy award to the uniquenick.
+        """
+        _cur_player = self.bot.db_backend.getOne(
+            "Players", 
+            ["profileid"], 
+            ("uniquenick=%s", [uniquenick])
         )
-        if _dbEntries:
-            _dbEntries = self.split_list(_dbEntries, 10) # Split into pages of 10 entries each
-            for _page in _dbEntries:
-                _embed = discord.Embed(
-                    title=f":first_place:  BF2:MC Online | Top {CS.LEADERBOARD_STRINGS[stat]} Leaderboard  :first_place:",
-                    description=f"*Top 50 players across all servers.*",
-                    color=discord.Colour.gold()
-                )
-                _nicknames = "```\n"
-                _stats = "```\n"
-                for _e in _page:
-                    _rank_str = f"#{_rank}"
-                    _nicknames += f"{_rank_str.ljust(3)} | {_e['nickname']}\n"
-                    if stat == 'score':
-                        _stats += f"{str(_e[stat]).rjust(6)} pts.\n"
-                    elif stat == 'wins':
-                        _stats += f" {self.bot.infl.no('game', _e[stat])} won\n"
-                    elif stat == 'top_player':
-                        _stats += f" {self.bot.infl.no('game', _e[stat])}\n"
-                    elif stat == 'pph':
-                        _stats += f"{str(int(_e[stat])).rjust(4)} PPH\n"
-                    elif stat == 'playtime':
-                        _stats += f"{str(int(_e[stat]/SECONDS_PER_HOUR)).rjust(5)} hrs.\n"
-                    else:
-                        _stats += "\n"
-                    _rank += 1
-                _nicknames += "```"
-                _stats += "```"
-                _embed.add_field(name="Player:", value=_nicknames, inline=True)
-                _embed.add_field(name=f"{CS.LEADERBOARD_STRINGS[stat]}:", value=_stats, inline=True)
-                _embed.set_footer(text={self.bot.config['API']['HumanURL']})
-                _pages.append(Page(embeds=[_embed]))
-        else:
-            _embed = discord.Embed(
-                title=f":first_place:  BF2:MC Online | Top {CS.LEADERBOARD_STRINGS[stat]} Leaderboard*  :first_place:",
-                description="No stats yet.",
-                color=discord.Colour.gold()
+        if _cur_player == None: return False # Bad uniquenick
+
+        _cur_owner = self.bot.db_discord.getOne(
+            "DiscordUserLinks", 
+            ["discord_uid"], 
+            ("profileid=%s", [_cur_player['profileid']])
+        )
+        if _cur_owner: return False # Nick already owned
+
+        _legacy_data = self.bot.db_discord.getOne(
+            "LegacyStats", 
+            ["dis_uid", "color_r", "color_g", "color_b"], 
+            ("nickname=%s", [uniquenick])
+        )
+        if _legacy_data == None: return False # Legacy data doesn't exist
+
+        if _legacy_data['dis_uid'] != None:
+            self.bot.db_discord.insert(
+                "DiscordUserLinks", 
+                {
+                    "profileid": _cur_player['profileid'], 
+                    "discord_uid": _legacy_data['dis_uid']
+                }
             )
-            _pages = [Page(embeds=[_embed])]
-        return Paginator(pages=_pages, author_check=False)
+        if _legacy_data['color_r'] != None:
+            self.bot.db_discord.insert(
+                "ProfileCustomization", 
+                {
+                    "profileid": _cur_player['profileid'], 
+                    "color_r": _legacy_data['color_r'], 
+                    "color_g": _legacy_data['color_g'], 
+                    "color_b": _legacy_data['color_b']
+                }
+            )
+        return True
 
 
     @commands.Cog.listener()
@@ -328,6 +375,8 @@ class CogPlayerStats(discord.Cog):
 
         TODO / Missing:
         Teams played (waiting for game server to be updated to send this data to backend)
+        Beta tester flag
+        /play clan page
         """
         # await ctx.defer() TODO
         _escaped_nickname = self.bot.escape_discord_formatting(nickname)
@@ -382,6 +431,7 @@ class CogPlayerStats(discord.Cog):
         _player_data = _player_data[0] # Should only return one entry, so let's isolate it
 
         ## Get Discord data (if availible)
+        await self.check_legacy_uniquenick(nickname)
         _discord_data = self.bot.db_discord.leftJoin(
             ("DiscordUserLinks", "ProfileCustomization"),
             (
@@ -412,12 +462,6 @@ class CogPlayerStats(discord.Cog):
             "queryPlayerGametypesPlayed",
             [_player_data['profileid']]
         )
-
-        ## DEBUGGING
-        print(f"Player Data:\n{_player_data}\n")
-        print(f"Discord Data:\n{_discord_data}\n")
-        print(f"Match W/L/D:\n{_match_wld_data}\n")
-        print(f"Match Gamemodes:\n{_match_gamemode_data}\n")
 
         ## Calculate additional data
         _rank_data = CS.RANK_DATA[_player_data['ran'] + 1]

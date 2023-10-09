@@ -1,7 +1,7 @@
 """CommonStrings.py
 
 Collection of commonly used public static final strings and related functions.
-Date: 10/05/2023
+Date: 10/08/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
