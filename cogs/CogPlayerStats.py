@@ -1,7 +1,7 @@
 """CogPlayerStats.py
 
 Handles tasks related to checking player stats and info.
-Date: 10/08/2023
+Date: 10/09/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -374,9 +374,8 @@ class CogPlayerStats(discord.Cog):
         Displays a specific player's BF2:MC Online stats.
 
         TODO / Missing:
-        Teams played (waiting for game server to be updated to send this data to backend)
         Beta tester flag
-        /play clan page
+        clan page
         """
         # await ctx.defer() TODO
         _escaped_nickname = self.bot.escape_discord_formatting(nickname)
@@ -463,6 +462,12 @@ class CogPlayerStats(discord.Cog):
             [_player_data['profileid']]
         )
 
+        ## Get team countries data
+        _team_countries_data = self.bot.db_backend.call(
+            "queryPlayerTeamCountriesPlayed",
+            [_player_data['profileid']]
+        )
+
         ## Calculate additional data
         _rank_data = CS.RANK_DATA[_player_data['ran'] + 1]
         # Get number of medals and build emoji string
@@ -540,13 +545,21 @@ class CogPlayerStats(discord.Cog):
         _cq_games = 0
         _cf_games = 0
         for _m in _match_gamemode_data:
-            if _m[0] == 1:
+            if _m[0] == CS.GM_STRINGS['capturetheflag'][1]:
                 _cf_games += 1
             else:
                 _cq_games += 1
-        _fav_gamemode = CS.GM_STRINGS['conquest'] # Default
+        _fav_gamemode = CS.GM_STRINGS['conquest'][0] # Default
         if _cf_games > _cq_games:
-            _fav_gamemode = CS.GM_STRINGS['capturetheflag']
+            _fav_gamemode = CS.GM_STRINGS['capturetheflag'][0]
+        # Determine favorite team country
+        _team_games = CS.TEAM_STRINGS.copy()
+        for _k in _team_games: _team_games[_k] = 0
+        for _m in _team_countries_data:
+            for _k in CS.TEAM_STRINGS:
+                if _m[0] == CS.TEAM_STRINGS[_k][1]:
+                    _team_games[_k] += 1
+        _fav_team = max(_team_games, key=_team_games.get)
         # Determine favorite kit
         _kit_spawns = {
             "Assualt":          _player_data['s1'],
@@ -558,7 +571,7 @@ class CogPlayerStats(discord.Cog):
         _fav_kit = max(_kit_spawns, key=lambda k: _kit_spawns[k])
         # Build match history string
         _match_history = ""
-        for _m in _match_results_data:
+        for _m in reversed(_match_results_data):
             if _m[4] == 'win':
                 _match_history += self.bot.config['Emoji']['MatchHistory']['Win'] + " "
             elif _m[4] == 'lose':
@@ -638,6 +651,9 @@ class CogPlayerStats(discord.Cog):
         _e_details.add_field(name="Total Games:", value=_player_data['ngp'], inline=True)
         _e_details.add_field(name="Win Percentage:", value=_win_percentage, inline=True)
         _e_details.add_field(name="Favorite Gamemode:", value=_fav_gamemode, inline=True)
+        _e_details.add_field(name="Conquest Played:", value=self.bot.infl.no('game', _cq_games), inline=True)
+        _e_details.add_field(name="CTF Played:", value=self.bot.infl.no('game', _cf_games), inline=True)
+        _e_details.add_field(name="Favorite Team:", value=CS.TEAM_STRINGS[_fav_team][0][:-1], inline=True)
         _e_details.set_footer(text=f"First seen online: {_player_data['created_at'].strftime('%m/%d/%Y')} -- BFMCspy Official Stats")
         _embeds[_title] = _e_details
         _select_options.append(

@@ -16,14 +16,14 @@ STATUS_STRINGS = {
     "unknown":  "SERVERS: UNKNOWN"
 }
 GM_STRINGS = {
-    "conquest":         "Conquest",
-    "capturetheflag":   "Capture the Flag"
+    "conquest":         ("Conquest", 1),
+    "capturetheflag":   ("Capture the Flag", 2)
 }
 TEAM_STRINGS = {
-    "US": ":flag_us:  United States:",
-    "CH": ":flag_cn:  China:",
-    "AC": ":flag_ir:  Middle Eastern Coalition:",
-    "EU": ":flag_eu:  European Union:"
+    "US": (":flag_us:  United States:", 1),
+    "CH": (":flag_cn:  China:", 2),
+    "AC": (":flag_ir:  Middle Eastern Coalition:", 3),
+    "EU": (":flag_eu:  European Union:", 4)
 }
 MAP_DATA = {
     "backstab":         ("Backstab", 0),
