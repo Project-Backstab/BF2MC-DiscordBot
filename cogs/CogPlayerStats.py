@@ -6,7 +6,7 @@ Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
 
-from datetime import datetime
+from datetime import date
 
 import discord
 from discord.ext import commands, tasks
@@ -76,6 +76,16 @@ class CogPlayerStats(discord.Cog):
                 "color_r TINYINT UNSIGNED DEFAULT NULL, "
                 "color_g TINYINT UNSIGNED DEFAULT NULL, "
                 "color_b TINYINT UNSIGNED DEFAULT NULL"
+            ")"
+        )
+        ## Setup MySQL table 'PlayerPatches'
+        #self.bot.db_discord.query("DROP TABLE PlayerPatches") # DEBUGGING
+        self.bot.db_discord.query(
+            "CREATE TABLE IF NOT EXISTS PlayerPatches ("
+                "id INT AUTO_INCREMENT PRIMARY KEY, "
+                "profileid INT NOT NULL, "
+                "patchid TINYINT UNSIGNED NOT NULL, "
+                "date_earned DATE NOT NULL"
             ")"
         )
         ## Setup MySQL table 'map_stats'
@@ -313,7 +323,9 @@ class CogPlayerStats(discord.Cog):
             ("nickname=%s", [uniquenick])
         )
         if _legacy_data == None: return False # Legacy data doesn't exist
+        self.bot.log(f"[PlayerStats] Legacy nickname detected: {uniquenick}")
 
+        # Set ownership using legacy owner
         if _legacy_data['dis_uid'] != None:
             self.bot.db_discord.insert(
                 "DiscordUserLinks", 
@@ -322,6 +334,7 @@ class CogPlayerStats(discord.Cog):
                     "discord_uid": _legacy_data['dis_uid']
                 }
             )
+        # Set profile customization using legacy customization (if present)
         if _legacy_data['color_r'] != None:
             self.bot.db_discord.insert(
                 "ProfileCustomization", 
@@ -330,6 +343,21 @@ class CogPlayerStats(discord.Cog):
                     "color_r": _legacy_data['color_r'], 
                     "color_g": _legacy_data['color_g'], 
                     "color_b": _legacy_data['color_b']
+                }
+            )
+        # Award Legacy Patch if we haven't already
+        _legacy_patch = self.bot.db_discord.getOne(
+            "PlayerPatches", 
+            ["id"], 
+            ("profileid=%s and patchid=%s", [_cur_player['profileid'], 0])
+        )
+        if _legacy_patch == None:
+            self.bot.db_discord.insert(
+                "PlayerPatches", 
+                {
+                    "profileid": _cur_player['profileid'], 
+                    "patchid": 0, 
+                    "date_earned": date.today()
                 }
             )
         return True
@@ -372,10 +400,6 @@ class CogPlayerStats(discord.Cog):
         """Slash Command: /stats player
         
         Displays a specific player's BF2:MC Online stats.
-
-        TODO / Missing:
-        Beta tester flag
-        clan page
         """
         # await ctx.defer() TODO
         _escaped_nickname = self.bot.escape_discord_formatting(nickname)
@@ -429,7 +453,7 @@ class CogPlayerStats(discord.Cog):
             )
         _player_data = _player_data[0] # Should only return one entry, so let's isolate it
 
-        ## Get Discord data (if availible)
+        ## Get Discord data (if available)
         await self.check_legacy_uniquenick(nickname)
         _discord_data = self.bot.db_discord.leftJoin(
             ("DiscordUserLinks", "ProfileCustomization"),
@@ -444,6 +468,13 @@ class CogPlayerStats(discord.Cog):
             _discord_data = _discord_data[0]
         else:
             _discord_data = None
+        
+        ## Get Patches data
+        _patches_data = self.bot.db_discord.getAll(
+            "PlayerPatches", 
+            ["patchid", "date_earned"], 
+            ("profileid=%s", [_player_data['profileid']])
+        )
         
         ## Get match win/lose/draw data and sort by date
         _match_results_data = self.bot.db_backend.call(
@@ -468,6 +499,12 @@ class CogPlayerStats(discord.Cog):
             [_player_data['profileid']]
         )
 
+        ## Get clan data (if available)
+        _clan_data = self.bot.db_backend.call(
+            "queryClanByProfileId",
+            [_player_data['profileid']]
+        )
+
         ## Calculate additional data
         _rank_data = CS.RANK_DATA[_player_data['ran'] + 1]
         # Get number of medals and build emoji string
@@ -476,7 +513,7 @@ class CogPlayerStats(discord.Cog):
         for _m in CS.MEDALS_DATA:
             if self.is_medal_earned(_player_data['medals'], _m):
                 _medals_emoji += self.bot.config['Emoji']['Medals'][_m] + " "
-        if _medals_emoji == "": _medals_emoji = "None"
+        if _medals_emoji == "": _medals_emoji = None
         # Determine earned ribbons
         _num_ribbons = 0
         _ribbons = []
@@ -521,7 +558,13 @@ class CogPlayerStats(discord.Cog):
             _ribbons.append(_id)
             _ribbons_emoji += self.bot.config['Emoji']['Ribbons'][_id] + " "
             _num_ribbons += 1
-        if _ribbons_emoji == "": _ribbons_emoji = "None"
+        if _ribbons_emoji == "": _ribbons_emoji = None
+        # Determine earned patches
+        _patches_emoji = ""
+        if _patches_data:
+            for _p in _patches_data:
+                _patches_emoji += self.bot.config['Patches'][_p['patchid']][2]
+        if _patches_emoji == "": _patches_emoji = None
         # Calculate K/D ratio
         if _player_data['deaths'] < 1: _player_data['deaths'] = 1 # Div. by 0 safeguard
         _kd_ratio = _player_data['kills'] / _player_data['deaths']
@@ -595,6 +638,9 @@ class CogPlayerStats(discord.Cog):
             if _owner:
                 _author_name = f"{_owner.display_name}'s Player Stats"
                 _author_url = _owner.display_avatar.url
+        # Set clan if applicable
+        if len(_clan_data) > 0:
+            _escaped_nickname = f"{_clan_data[0][2]} {_escaped_nickname}"
         
         ## Build embeds/pages
         _embeds = {}
@@ -611,8 +657,12 @@ class CogPlayerStats(discord.Cog):
             icon_url=_author_url
         )
         _e_summary.set_thumbnail(url=_rank_data[1])
-        _e_summary.add_field(name="Medals:", value=_medals_emoji, inline=False)
-        _e_summary.add_field(name="Ribbons:", value=_ribbons_emoji, inline=False)
+        if _medals_emoji:
+            _e_summary.add_field(name="Medals:", value=_medals_emoji, inline=False)
+        if _ribbons_emoji:
+            _e_summary.add_field(name="Ribbons:", value=_ribbons_emoji, inline=False)
+        if _patches_emoji:
+            _e_summary.add_field(name="Patches:", value=_patches_emoji, inline=False)
         _e_summary.add_field(name="PPH:", value=int(_player_data['pph']), inline=True)
         _e_summary.add_field(name="Total Score:", value=_player_data['score'], inline=True)
         _e_summary.add_field(name="Medals:", value=_num_medals, inline=True)
@@ -728,6 +778,39 @@ class CogPlayerStats(discord.Cog):
                 emoji=_emoji
             )
         )
+        # Patches
+        if _patches_data:
+            _title = "Patches"
+            _desc = f"***{_rank_data[0]}***"
+            _desc += f"\n### {_title} Earned:"
+            _e_patches = discord.Embed(
+                title=_escaped_nickname,
+                description=_desc,
+                color=_color
+            )
+            _e_patches.set_author(
+                name=_author_name, 
+                icon_url=_author_url
+            )
+            _e_patches.set_thumbnail(url=_rank_data[1])
+            for _p in _patches_data:
+                _e_patches.add_field(
+                    name=f"{self.bot.config['Patches'][_p['patchid']][2]} {self.bot.config['Patches'][_p['patchid']][0]}:", 
+                    value=f"*Earned: {_p['date_earned'].strftime('%m/%d/%y')}*\n{self.bot.config['Patches'][_p['patchid']][1]}", 
+                    inline=False
+                )
+            _e_patches.set_footer(text="BFMCspy Official Stats")
+            _embeds[_title] = _e_patches
+            _emoji = self.bot.config['Patches'][0][2]
+            _emoji = _emoji.split(":")[2][:-1]
+            _emoji = await ctx.guild.fetch_emoji(_emoji)
+            _select_options.append(
+                discord.SelectOption(
+                    label=_title,
+                    description="All patches earned from community events",
+                    emoji=_emoji
+                )
+            )
         # Vehicles Destroyed
         _title = "Vehicles Destroyed"
         _desc = f"***{_rank_data[0]}***"
@@ -1178,8 +1261,7 @@ class CogPlayerStats(discord.Cog):
         if not ctx.author.guild_permissions.manage_channels:
             _msg = ":warning: You do not have permission to run this command."
             _msg += "\n\nPlease try using `/stats nickname claim`, or contact an admin if you need to claim another nickname."
-            await ctx.respond(_msg, ephemeral=True)
-            return
+            return await ctx.respond(_msg, ephemeral=True)
         
         _dbEntry = self.bot.db_discord.getOne(
             "player_stats", 
@@ -1278,8 +1360,7 @@ class CogPlayerStats(discord.Cog):
         """
         # Only members with Manage Channels permission can use this command.
         if not ctx.author.guild_permissions.manage_channels:
-            await ctx.respond(":warning: You do not have permission to run this command.", ephemeral=True)
-            return
+            return await ctx.respond(":warning: You do not have permission to run this command.", ephemeral=True)
         
         # Get existing nickname PID (if it exists)
         _dbPID = self.bot.db_discord.getOne(
@@ -1325,7 +1406,7 @@ class PlayerStatsView(discord.ui.View):
     
     """
     def __init__(self, select_options: list[discord.SelectOption], embeds: dict):
-        super().__init__()
+        super().__init__(disable_on_timeout=True)
         self.embeds = embeds
         self.select_callback.placeholder = select_options[0].label
         self.select_callback.options = select_options
