@@ -1,7 +1,7 @@
 """CogPlayerStats.py
 
 Handles tasks related to checking player stats and info.
-Date: 10/09/2023
+Date: 10/11/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -1024,46 +1024,62 @@ class CogPlayerStats(discord.Cog):
     """
     total = stats.create_subgroup("total", 'Commands related to checking "total count" related stats')
     
-    @total.command(name = "playercount", description="Displays the count of unique nicknames with recorded stats")
-    @commands.cooldown(1, 1800, commands.BucketType.channel)
+    @total.command(name = "playercount", description="Displays the total count of unique registered players")
+    @commands.cooldown(1, 60, commands.BucketType.channel)
     async def playercount(self, ctx):
         """Slash Command: /stats total playercount
         
-        Displays the count of unique nicknames with recorded stats.
+        Displays the total count of unique registered players by IP address.
         """
-        _dbEntries = self.bot.db_discord.getAll("player_stats", ["id"])
-
-        _total_players = 0
-        if _dbEntries != None:
-            _total_players = len(_dbEntries)
+        _dbResult = self.bot.db_backend.call(
+            "queryPlayerCount",
+            [True]
+        )
         
         _embed = discord.Embed(
-            title=f"👥︎  Total Player Count (All-Time)",
-            description=f"I have tracked **{_total_players}** unique nicknames play at least one game since {STATS_EPOCH_DATE_STR}*",
+            title=f"👥︎  Total Player Count",
+            description=f"There are currently **{_dbResult[0][0]}** uniquely registered players",
             color=discord.Colour.dark_blue()
         )
-        _embed.set_footer(text="*Real player count may be lower due to players having multiple accounts")
+        _embed.set_footer(text="BFMCspy Official Stats")
         await ctx.respond(embed=_embed)
     
     @total.command(name = "games", description="Displays the total number of games played across all servers")
-    @commands.cooldown(1, 1800, commands.BucketType.channel)
-    async def games(self, ctx):
+    @commands.cooldown(1, 60, commands.BucketType.channel)
+    async def games(
+        self, 
+        ctx, 
+        clan_games_filter: discord.Option(
+            int, 
+            name="game_types",
+            description="Which types of games to count", 
+            choices=[
+                discord.OptionChoice("Only public games", value=0), 
+                discord.OptionChoice("Only clan games", value=1),
+                discord.OptionChoice("Both public & clan games", value=2)
+            ],
+            default=2
+        )
+    ):
         """Slash Command: /stats total games
         
         Displays the total number of games played across all servers.
+        Option option to restrict to just public or clan games.
         """
-        _dbEntries = self.bot.db_discord.getAll("map_stats", ["conquest", "capturetheflag"])
-
-        _total_games = 0
-        if _dbEntries != None:
-            for _dbEntry in _dbEntries:
-                _total_games += _dbEntry['conquest'] + _dbEntry['capturetheflag']
+        _dbResult = self.bot.db_backend.call(
+            "queryGameCount",
+            [clan_games_filter]
+        )
         
+        if clan_games_filter == 0:      _filter = "Public"
+        elif clan_games_filter == 1:    _filter = "Clan"
+        else:                           _filter = "Public & Clan"
         _embed = discord.Embed(
-            title=f"🎮  Total Games (All Servers)",
-            description=f"I have tracked **{_total_games}** unique games played across all servers since July of 2023",
+            title=f"🎮  Total Games ({_filter})",
+            description=f"**{_dbResult[0][0]}** unique games have been played across all servers since {STATS_EPOCH_DATE_STR}",
             color=discord.Colour.dark_blue()
         )
+        _embed.set_footer(text="BFMCspy Official Stats")
         await ctx.respond(embed=_embed)
 
     """Slash Command Sub-Group: /stats nickname
@@ -1186,7 +1202,7 @@ class CogPlayerStats(discord.Cog):
         nickname: discord.Option(
             str, 
             description="Nickname you own", 
-            autocomplete=discord.utils.basic_autocomplete(get_uniquenicks), 
+            autocomplete=discord.utils.basic_autocomplete(get_owned_uniquenicks), 
             max_length=255, 
             required=True
         ), 
