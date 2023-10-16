@@ -1,7 +1,7 @@
 """CommonStrings.py
 
 Collection of commonly used public static final strings and related functions.
-Date: 10/08/2023
+Date: 10/16/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -10,6 +10,7 @@ COUNTRY_FLAGS_URL = "https://flagcdn.com/w40/<code>.png"
 LANG_FLAGS_URL = "https://www.unknown.nu/flags/images/<code>-100"
 GM_THUMBNAILS_URL = "https://raw.githubusercontent.com/lilkingjr1/backstab-discord-bot/main/assets/gamemode_thumbnails/<gamemode>.png"
 MAP_IMAGES_URL = "https://raw.githubusercontent.com/lilkingjr1/backstab-discord-bot/main/assets/map_images/<map_name>.png"
+RANK_IMAGES_URL = "https://raw.githubusercontent.com/Project-Backstab/BF2MC-DiscordBot/main/assets/rank_images/rank<rank_id>.png"
 STATUS_STRINGS = {
     "online":   "SERVERS: ONLINE 🟢",
     "offline":  "SERVERS: OFFLINE 🔴",
@@ -25,44 +26,43 @@ TEAM_STRINGS = {
     "AC": (":flag_ir:  Middle Eastern Coalition:", 3),
     "EU": (":flag_eu:  European Union:", 4)
 }
-MAP_DATA = {
-    "backstab":         ("Backstab", 0),
-    "bridgetoofar":     ("Bridge Too Far", 1),
-    "coldfront":        ("Cold Front", 2),
-    "dammage":          ("Dammage", 3),
-    "deadlypass":       ("Deadly Pass", 4),
-    "harboredge":       ("Harbor Edge", 5),
-    "honor":            ("Honor", 6),
-    "littlebigeye":     ("Little Big Eye", 7),
-    "missilecrisis":    ("Missile Crisis", 8),
-    "russianborder":    ("Russian Border", 9),
-    "specialop":        ("Special Op", 10),
-    "theblackgold":     ("The Black Gold", 11),
-    "thenest":          ("The Nest", 12)
-}
-# Rank Data = (Rank Name, Rank Img)
-# TODO: Change 'v4.0.0-bfmc-spy' back to 'main'
+MAP_STRINGS = (
+    "Backstab",
+    "Bridge Too Far",
+    "Cold Front",
+    "Dammage",
+    "Deadly Pass",
+    "Harbor Edge",
+    "Honor",
+    "Little Big Eye",
+    "Missile Crisis",
+    "Russian Border",
+    "Special Op",
+    "The Black Gold",
+    "The Nest",
+)
+# Rank Data = (Rank Name, Rank Img URL)
 RANK_DATA = (
-    ("Private", "https://raw.githubusercontent.com/Project-Backstab/BF2MC-DiscordBot/v4.0.0-bfmc-spy/assets/rank_images/rank01.png"),
-    ("Private 1st Class", "https://raw.githubusercontent.com/Project-Backstab/BF2MC-DiscordBot/v4.0.0-bfmc-spy/assets/rank_images/rank02.png"),
-    ("Corporal", "https://raw.githubusercontent.com/Project-Backstab/BF2MC-DiscordBot/v4.0.0-bfmc-spy/assets/rank_images/rank03.png"),
-    ("Sergeant", "https://raw.githubusercontent.com/Project-Backstab/BF2MC-DiscordBot/v4.0.0-bfmc-spy/assets/rank_images/rank04.png"),
-    ("Sergeant 1st Class", "https://raw.githubusercontent.com/Project-Backstab/BF2MC-DiscordBot/v4.0.0-bfmc-spy/assets/rank_images/rank05.png"),
-    ("Master Sergeant", "https://raw.githubusercontent.com/Project-Backstab/BF2MC-DiscordBot/v4.0.0-bfmc-spy/assets/rank_images/rank06.png"),
-    ("Sgt. Major", "https://raw.githubusercontent.com/Project-Backstab/BF2MC-DiscordBot/v4.0.0-bfmc-spy/assets/rank_images/rank07.png"),
-    ("Command Sgt. Major", "https://raw.githubusercontent.com/Project-Backstab/BF2MC-DiscordBot/v4.0.0-bfmc-spy/assets/rank_images/rank08.png"),
-    ("Warrant Officer", "https://raw.githubusercontent.com/Project-Backstab/BF2MC-DiscordBot/v4.0.0-bfmc-spy/assets/rank_images/rank09.png"),
-    ("Chief Warrant Officer", "https://raw.githubusercontent.com/Project-Backstab/BF2MC-DiscordBot/v4.0.0-bfmc-spy/assets/rank_images/rank10.png"),
-    ("2nd Lieutenant", "https://raw.githubusercontent.com/Project-Backstab/BF2MC-DiscordBot/v4.0.0-bfmc-spy/assets/rank_images/rank11.png"),
-    ("1st Lieutenant", "https://raw.githubusercontent.com/Project-Backstab/BF2MC-DiscordBot/v4.0.0-bfmc-spy/assets/rank_images/rank12.png"),
-    ("Captain", "https://raw.githubusercontent.com/Project-Backstab/BF2MC-DiscordBot/v4.0.0-bfmc-spy/assets/rank_images/rank13.png"),
-    ("Major", "https://raw.githubusercontent.com/Project-Backstab/BF2MC-DiscordBot/v4.0.0-bfmc-spy/assets/rank_images/rank14.png"),
-    ("Lieutenant Colonel", "https://raw.githubusercontent.com/Project-Backstab/BF2MC-DiscordBot/v4.0.0-bfmc-spy/assets/rank_images/rank15.png"),
-    ("Colonel", "https://raw.githubusercontent.com/Project-Backstab/BF2MC-DiscordBot/v4.0.0-bfmc-spy/assets/rank_images/rank16.png"),
-    ("Brigadier General", "https://raw.githubusercontent.com/Project-Backstab/BF2MC-DiscordBot/v4.0.0-bfmc-spy/assets/rank_images/rank17.png"),
-    ("Major General", "https://raw.githubusercontent.com/Project-Backstab/BF2MC-DiscordBot/v4.0.0-bfmc-spy/assets/rank_images/rank18.png"),
-    ("Lieutenant General", "https://raw.githubusercontent.com/Project-Backstab/BF2MC-DiscordBot/v4.0.0-bfmc-spy/assets/rank_images/rank19.png"),
-    ("5 Star General", "https://raw.githubusercontent.com/Project-Backstab/BF2MC-DiscordBot/v4.0.0-bfmc-spy/assets/rank_images/rank20.png")
+    ("Private", RANK_IMAGES_URL.replace("<rank_id>", "01")),
+    ("Private 1st Class", RANK_IMAGES_URL.replace("<rank_id>", "02")),
+    ("Corporal", RANK_IMAGES_URL.replace("<rank_id>", "03")),
+    ("Sergeant", RANK_IMAGES_URL.replace("<rank_id>", "04")),
+    ("Sergeant 1st Class", RANK_IMAGES_URL.replace("<rank_id>", "05")),
+    ("Master Sergeant", RANK_IMAGES_URL.replace("<rank_id>", "06")),
+    ("Sgt. Major", RANK_IMAGES_URL.replace("<rank_id>", "07")),
+    ("Command Sgt. Major", RANK_IMAGES_URL.replace("<rank_id>", "08")),
+    ("Warrant Officer", RANK_IMAGES_URL.replace("<rank_id>", "09")),
+    ("Chief Warrant Officer", RANK_IMAGES_URL.replace("<rank_id>", "10")),
+    ("2nd Lieutenant", RANK_IMAGES_URL.replace("<rank_id>", "11")),
+    ("1st Lieutenant", RANK_IMAGES_URL.replace("<rank_id>", "12")),
+    ("Captain", RANK_IMAGES_URL.replace("<rank_id>", "13")),
+    ("Major", RANK_IMAGES_URL.replace("<rank_id>", "14")),
+    ("Lieutenant Colonel", RANK_IMAGES_URL.replace("<rank_id>", "15")),
+    ("Colonel", RANK_IMAGES_URL.replace("<rank_id>", "16")),
+    ("Brigadier General", RANK_IMAGES_URL.replace("<rank_id>", "17")),
+    ("Major General", RANK_IMAGES_URL.replace("<rank_id>", "18")),
+    ("Lieutenant General", RANK_IMAGES_URL.replace("<rank_id>", "19")),
+    ("5 Star General", RANK_IMAGES_URL.replace("<rank_id>", "20"))
 )
 MEDALS_DATA = {
     "The_Service_Cross":            (1 << 0, "The Service Cross", "Kill 5 enemies without dying, using kit weapons only."),
@@ -92,11 +92,12 @@ RIBBONS_DATA = {
     "Top_Player_20":        ("20 Games Top Player", "Finish top player in 20 game rounds")
 }
 LEADERBOARD_STRINGS = {
-    "score":        "Score",
-    "wins":         "Wins",
-    "top_player":   "MVP",
-    "pph":          "Points per Hour",
-    "playtime":     "Play Time"
+    "score":    "Score",
+    "mv":       "Major Victories",
+    "ttb":      "MVP",
+    "pph":      "Points per Hour",
+    "time":     "Play Time",
+    "kills":     "Kills"
 }
 
 

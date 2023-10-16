@@ -1,7 +1,7 @@
 """CogPlayerStats.py
 
 Handles tasks related to checking player stats and info.
-Date: 10/12/2023
+Date: 10/15/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -10,7 +10,7 @@ import hashlib
 from datetime import date
 
 import discord
-from discord.ext import commands, tasks
+from discord.ext import commands
 from discord.ext.pages import Paginator, Page
 import common.CommonStrings as CS
 
@@ -89,16 +89,6 @@ class CogPlayerStats(discord.Cog):
                 "date_earned DATE NOT NULL"
             ")"
         )
-        ## Setup MySQL table 'map_stats'
-        #self.bot.db_discord.query("DROP TABLE map_stats") # DEBUGGING
-        self.bot.db_discord.query(
-            "CREATE TABLE IF NOT EXISTS map_stats ("
-                "map_id INT PRIMARY KEY, "
-                "map_name TINYTEXT NOT NULL, "
-                "conquest INT DEFAULT 0, "
-                "capturetheflag INT DEFAULT 0"
-            ")"
-        )
     
     def split_list(self, lst: list, chunk_size: int) -> list[list]:
         """Split a list into smaller lists of equal size"""
@@ -138,105 +128,6 @@ class CogPlayerStats(discord.Cog):
         hours, minutes, seconds = time.split(':')
         return int(hours) * 3600 + int(minutes) * 60 + int(seconds)
     """
-    
-    def get_paginator_for_stat(self, stat: str) -> Paginator:
-        """Returns a Leaderboard style Paginator for a given database stat"""
-        _rank = 1
-        _pages = []
-        _dbEntries = self.bot.db_discord.getAll(
-            "player_stats", 
-            ["nickname", stat], 
-            None, 
-            [stat, "DESC"], # Order highest first
-            [0, 50] # Limit to top 50 players
-        )
-        if _dbEntries:
-            _dbEntries = self.split_list(_dbEntries, 10) # Split into pages of 10 entries each
-            for _page in _dbEntries:
-                _embed = discord.Embed(
-                    title=f":first_place:  BF2:MC Online | Top {CS.LEADERBOARD_STRINGS[stat]} Leaderboard  :first_place:",
-                    description=f"*Top 50 players across all servers.*",
-                    color=discord.Colour.gold()
-                )
-                _nicknames = "```\n"
-                _stats = "```\n"
-                for _e in _page:
-                    _rank_str = f"#{_rank}"
-                    _nicknames += f"{_rank_str.ljust(3)} | {_e['nickname']}\n"
-                    if stat == 'score':
-                        _stats += f"{str(_e[stat]).rjust(6)} pts.\n"
-                    elif stat == 'wins':
-                        _stats += f" {self.bot.infl.no('game', _e[stat])} won\n"
-                    elif stat == 'top_player':
-                        _stats += f" {self.bot.infl.no('game', _e[stat])}\n"
-                    elif stat == 'pph':
-                        _stats += f"{str(int(_e[stat])).rjust(4)} PPH\n"
-                    elif stat == 'playtime':
-                        _stats += f"{str(int(_e[stat]/SECONDS_PER_HOUR)).rjust(5)} hrs.\n"
-                    else:
-                        _stats += "\n"
-                    _rank += 1
-                _nicknames += "```"
-                _stats += "```"
-                _embed.add_field(name="Player:", value=_nicknames, inline=True)
-                _embed.add_field(name=f"{CS.LEADERBOARD_STRINGS[stat]}:", value=_stats, inline=True)
-                _embed.set_footer(text={self.bot.config['API']['HumanURL']})
-                _pages.append(Page(embeds=[_embed]))
-        else:
-            _embed = discord.Embed(
-                title=f":first_place:  BF2:MC Online | Top {CS.LEADERBOARD_STRINGS[stat]} Leaderboard*  :first_place:",
-                description="No stats yet.",
-                color=discord.Colour.gold()
-            )
-            _pages = [Page(embeds=[_embed])]
-        return Paginator(pages=_pages, author_check=False)
-    
-    async def record_map_stats(self, server_data: dict) -> bool:
-        """Record Map Statistics
-        
-        Additively records map statistics to the database given a server's JSON data.
-        New records are created for first-seen maps.
-        Returns if it was successful or not.
-        """
-        self.bot.log(f"Recording map stats... ", end='', time=False)
-
-        # Sanitize input (because I'm paranoid)
-        if server_data == None or server_data['playersCount'] < self.bot.config['PlayerStats']['MatchMinPlayers']:
-            self.bot.log("Failed! (Invalid server data passed)", time=False)
-            return False
-        
-        # Determine if map was played on Conquest of CTF
-        if server_data['gameType'] == "capturetheflag":
-            _gamemode = "capturetheflag"
-        else:
-            _gamemode = "conquest"
-        
-        # Try to get map stat from DB
-        _map_id = CS.MAP_DATA[server_data['mapName']][1]
-        _dbEntry = self.bot.db_discord.getOne(
-            "map_stats", 
-            [_gamemode], 
-            ("map_id=%s", [_map_id])
-        )
-        
-        # Add 1 to gamemode times played
-        _times_played = 1
-        if _dbEntry != None:
-            _times_played += _dbEntry[_gamemode]
-        
-        # Insert or Update stat in DB
-        try:
-            self.bot.db_discord.insertOrUpdate(
-                "map_stats",
-                {"map_id": _map_id, "map_name": server_data['mapName'], _gamemode: _times_played},
-                "map_id"
-            )
-        except:
-            self.bot.log("Failed! (DB insert or update)", time=False)
-            return False
-
-        self.bot.log("Done.", time=False)
-        return True
     
     # async def check_stats_integrity(self, server_data: dict) -> bool:
     #     """Check Stats Integrity
@@ -414,7 +305,7 @@ class CogPlayerStats(discord.Cog):
         
         Displays a specific player's BF2:MC Online stats.
         """
-        # await ctx.defer() TODO
+        await ctx.defer() # Temp fix for slow SQL queries
         _escaped_nickname = self.bot.escape_discord_formatting(nickname)
 
         ## Get player data
@@ -459,10 +350,10 @@ class CogPlayerStats(discord.Cog):
             ("profileid", "profileid"),
             ("uniquenick=%s", [nickname])
         )
-        if _player_data == None or len(_player_data) < 1:
+        if _player_data == None:
             return await ctx.respond(
-                f':warning: We have not seen a player by the nickname of "{_escaped_nickname}" play BF2:MC Online since {STATS_EPOCH_DATE_STR}.', 
-                ephemeral=True
+                f':warning: An account with the nickname of "{_escaped_nickname}" could not be found.', 
+                #ephemeral=True
             )
         _player_data = _player_data[0] # Should only return one entry, so let's isolate it
 
@@ -519,7 +410,7 @@ class CogPlayerStats(discord.Cog):
         )
 
         ## Calculate additional data
-        _rank_data = CS.RANK_DATA[_player_data['ran'] + 1]
+        _rank_data = CS.RANK_DATA[_player_data['ran'] - 1]
         # Get number of medals and build emoji string
         _num_medals = self.get_num_medals_earned(_player_data['medals'])
         _medals_emoji = ""
@@ -866,7 +757,7 @@ class CogPlayerStats(discord.Cog):
             icon_url=_author_url
         )
         _e_kits.set_thumbnail(url=_rank_data[1])
-        _e_kits.add_field(name="Favorite Kit:", value=_fav_kit, inline=False)
+        _e_kits.add_field(name="Favorite Kit (Most Spawns):", value=_fav_kit, inline=False)
         _e_kits.add_field(name="Assult Kills:", value=_player_data['lavd'], inline=True)
         _e_kits.add_field(name="Sniper Kills:", value=_player_data['mavd'], inline=True)
         _e_kits.add_field(name="Special Op. Kills:", value=_player_data['havd'], inline=True)
@@ -885,8 +776,11 @@ class CogPlayerStats(discord.Cog):
         await ctx.respond(embed=_embeds["Summary"], view=self.PlayerStatsView(_select_options, _embeds))
     
     class PlayerStatsView(discord.ui.View):
-        """TODO
+        """Discord UI View: Player Stats
         
+        Handles the `/stats player` view which includes a select menu of passed options
+        to display various passed embed "pages".
+        Automatically disables list selections after 180 sec.
         """
         def __init__(self, select_options: list[discord.SelectOption], embeds: dict):
             super().__init__(disable_on_timeout=True)
@@ -905,61 +799,86 @@ class CogPlayerStats(discord.Cog):
                 view=self
             )
 
-    """Slash Command Sub-Group: /stats leaderboard
-    
-    A sub-group of commands related to checking the leaderboard for various player stats.
-    """
-    leaderboard = stats.create_subgroup("leaderboard", "Commands related to checking the  leaderboard for various player stats")
-
-    @leaderboard.command(name = "score", description="See a leaderboard of the top scoring players of BF2:MC Online")
+    @stats.command(name = "leaderboard", description="See a top 50 leaderboard for a particular stat in BF2:MC Online")
     @commands.cooldown(1, 180, commands.BucketType.channel)
-    async def score(self, ctx):
-        """Slash Command: /stats leaderboard score
+    async def leaderboard(
+        self,
+        ctx,
+        stat: discord.Option(
+            str, 
+            name="leaderboard", 
+            description="Leaderboard to display", 
+            choices=[
+                discord.OptionChoice("Score", value='score'),
+                discord.OptionChoice("Wins", value='mv'),
+                discord.OptionChoice("MVP", value='ttb'),
+                discord.OptionChoice("PPH", value='pph'),
+                discord.OptionChoice("Play Time", value='time'),
+                discord.OptionChoice("Kills", value='kills')
+            ], 
+            required=True
+        )
+    ):
+        """Slash Command: /stats leaderboard
         
-        Displays a leaderboard of the top scoring players of BF2:MC Online.
+        Displays a top 50 leaderboard of the specified BF2:MC Online stat.
         """
-        paginator = self.get_paginator_for_stat('score')
-        await paginator.respond(ctx.interaction)
-
-    @leaderboard.command(name = "wins", description="See a leaderboard of the top winning players of BF2:MC Online")
-    @commands.cooldown(1, 180, commands.BucketType.channel)
-    async def wins(self, ctx):
-        """Slash Command: /stats leaderboard wins
-        
-        Displays a leaderboard of the top winning players of BF2:MC Online.
-        """
-        paginator = self.get_paginator_for_stat('wins')
-        await paginator.respond(ctx.interaction)
-
-    @leaderboard.command(name = "mvp", description="See a leaderboard of players who were MVP in their games of BF2:MC Online")
-    @commands.cooldown(1, 180, commands.BucketType.channel)
-    async def mvp(self, ctx):
-        """Slash Command: /stats leaderboard mvp
-        
-        Displays a leaderboard of players who were MVP in their games of BF2:MC Online.
-        """
-        paginator = self.get_paginator_for_stat('top_player')
-        await paginator.respond(ctx.interaction)
-
-    @leaderboard.command(name = "pph", description="See a leaderboard of players with the most points earned per hour on BF2:MC Online")
-    @commands.cooldown(1, 180, commands.BucketType.channel)
-    async def pph(self, ctx):
-        """Slash Command: /stats leaderboard pph
-        
-        Displays a leaderboard of players with the most points earned per hour on BF2:MC Online.
-        """
-        paginator = self.get_paginator_for_stat('pph')
-        await paginator.respond(ctx.interaction)
-
-    @leaderboard.command(name = "playtime", description="See a leaderboard of players with the most hours played on BF2:MC Online")
-    @commands.cooldown(1, 180, commands.BucketType.channel)
-    async def playtime(self, ctx):
-        """Slash Command: /stats leaderboard playtime
-        
-        Displays a leaderboard of players with the most hours played on BF2:MC Online.
-        """
-        paginator = self.get_paginator_for_stat('playtime')
-        await paginator.respond(ctx.interaction)
+        _rank = 1
+        _pages = []
+        _dbEntries = self.bot.db_backend.leftJoin(
+            ("PlayerStats", "Players"), 
+            (
+                [stat], 
+                ["uniquenick"]
+            ), 
+            ("profileid", "profileid"), 
+            None, 
+            [stat, "DESC"], # Order highest first
+            [0, 50] # Limit to top 50 players
+        )
+        if _dbEntries:
+            _dbEntries = self.split_list(_dbEntries, 10) # Split into pages of 10 entries each
+            for _page in _dbEntries:
+                _embed = discord.Embed(
+                    title=f":first_place:  BF2:MC Online | Top {CS.LEADERBOARD_STRINGS[stat]} Leaderboard  :first_place:",
+                    description=f"*Top 50 players across all servers.*",
+                    color=discord.Colour.gold()
+                )
+                _nicknames = "```\n"
+                _stats = "```\n"
+                for _e in _page:
+                    _rank_str = f"#{_rank}"
+                    _nicknames += f"{_rank_str.ljust(3)} | {_e['uniquenick']}\n"
+                    if stat == 'score':
+                        _stats += f"{str(_e[stat]).rjust(6)} pts.\n"
+                    elif stat == 'mv':
+                        _stats += f" {self.bot.infl.no('game', _e[stat])} won\n"
+                    elif stat == 'ttb':
+                        _stats += f" {self.bot.infl.no('game', _e[stat])}\n"
+                    elif stat == 'pph':
+                        _stats += f"{str(int(_e[stat])).rjust(4)} PPH\n"
+                    elif stat == 'time':
+                        _stats += f"{str(int(_e[stat]/SECONDS_PER_HOUR)).rjust(5)} hrs.\n"
+                    elif stat == 'kills':
+                        _stats += f"{str(_e[stat]).rjust(8)}\n"
+                    else:
+                        _stats += "\n"
+                    _rank += 1
+                _nicknames += "```"
+                _stats += "```"
+                _embed.add_field(name="Player:", value=_nicknames, inline=True)
+                _embed.add_field(name=f"{CS.LEADERBOARD_STRINGS[stat]}:", value=_stats, inline=True)
+                _embed.set_footer(text="BFMCspy Official Stats")
+                _pages.append(Page(embeds=[_embed]))
+        else:
+            _embed = discord.Embed(
+                title=f":first_place:  BF2:MC Online | Top {CS.LEADERBOARD_STRINGS[stat]} Leaderboard*  :first_place:",
+                description="No stats yet.",
+                color=discord.Colour.gold()
+            )
+            _pages = [Page(embeds=[_embed])]
+        _paginator = Paginator(pages=_pages, author_check=False)
+        await _paginator.respond(ctx.interaction)
 
     """Slash Command Sub-Group: /stats mostplayed
     
@@ -983,39 +902,50 @@ class CogPlayerStats(discord.Cog):
         
         Displays which maps have been played the most for a given gamemode.
         """
-        _gm_id = "conquest"
+        # Determine gametype ID
+        _gt_id = 1
         if gamemode == "Capture the Flag":
-            _gm_id = "capturetheflag"
+            _gt_id = 2
         
-        _dbEntries = self.bot.db_discord.getAll(
-            "map_stats", 
-            ["map_name", _gm_id], 
-            None, 
-            [_gm_id, "DESC"], 
-            [0, 5]
+        # Get all games for that gametype
+        _games = self.bot.db_backend.getAll(
+            "GameStats", 
+            ["mapid"], 
+            ("gametype = %s", [_gt_id])
         )
+        if _games == None:
+            return await ctx.respond(f":warning: No data for {gamemode} yet. Please try again later.", ephemeral=True)
+        
+        # Create a dictionary to count the occurrences of each 'mapid'
+        _mapid_counts = {}
+        for _g in _games:
+            _mapid_counts[_g['mapid']] = _mapid_counts.get(_g['mapid'], 0) + 1
 
-        if _dbEntries != None:
-            _maps = "```\n"
-            _games = "```\n"
-            for _i, _dbEntry in enumerate(_dbEntries):
-                _maps += f"{_i+1}. {CS.MAP_DATA[_dbEntry['map_name']][0]}\n"
-                _games += f"{self.bot.infl.no('game', _dbEntry[_gm_id]).rjust(11)}\n"
-            _maps += "```"
-            _games += "```"
-            _embed = discord.Embed(
-                title=f"🗺  Most Played *{gamemode}* Maps",
-                description=f"*Currently, the most played {gamemode} maps are...*",
-                color=discord.Colour.dark_blue()
-            )
-            _embed.add_field(name="Map:", value=_maps, inline=True)
-            _embed.add_field(name="Games Played:", value=_games, inline=True)
-            _embed.add_field(name="Most Played Map:", value="", inline=False)
-            _embed.set_image(url=CS.MAP_IMAGES_URL.replace("<map_name>", _dbEntries[0]['map_name']))
-            _embed.set_footer(text=f"{self.bot.config['API']['HumanURL']}")
-            await ctx.respond(embed=_embed)
-        else:
-            await ctx.respond(f":warning: No data for {gamemode} yet. Please try again later.", ephemeral=True)
+        # Sort the 'mapid' counts in descending order
+        _sorted_mapid_counts = sorted(_mapid_counts.items(), key=lambda x: x[1], reverse=True)
+
+        # Limit to the top 5 most occurring 'mapid' values and their counts
+        _sorted_mapid_counts = _sorted_mapid_counts[:5]
+        
+        _maps = "```\n"
+        _games = "```\n"
+        for _i, _map_data in enumerate(_sorted_mapid_counts):
+            _maps += f"{_i+1}. {CS.MAP_STRINGS[_map_data[0]]}\n"
+            _games += f"{self.bot.infl.no('game', _map_data[1]).rjust(11)}\n"
+        _maps += "```"
+        _games += "```"
+        _url_map_name = CS.MAP_STRINGS[_sorted_mapid_counts[0][0]].lower().replace(" ", "")
+        _embed = discord.Embed(
+            title=f"🗺  Most Played *{gamemode}* Maps",
+            description=f"*Currently, the most played {gamemode} maps are...*",
+            color=discord.Colour.dark_blue()
+        )
+        _embed.add_field(name="Map:", value=_maps, inline=True)
+        _embed.add_field(name="Games Played:", value=_games, inline=True)
+        _embed.add_field(name="Most Played Map:", value="", inline=False)
+        _embed.set_image(url=CS.MAP_IMAGES_URL.replace("<map_name>", _url_map_name))
+        _embed.set_footer(text="BFMCspy Official Stats")
+        await ctx.respond(embed=_embed)
 
     """Slash Command Sub-Group: /stats total
     
@@ -1122,7 +1052,10 @@ class CogPlayerStats(discord.Cog):
             ("uniquenick=%s", [nickname])
         )
         if _profile == None:
-            return await ctx.respond(f':warning: An account with the nickname of "{_escaped_nickname}" has not been created yet.', ephemeral=True)
+            return await ctx.respond(
+                f':warning: An account with the nickname of "{_escaped_nickname}" could not be found.', 
+                ephemeral=True
+            )
 
         # Check password
         _hash = hashlib.md5(password.encode()).hexdigest()
@@ -1189,7 +1122,10 @@ class CogPlayerStats(discord.Cog):
         # Check nickname exists
         _profileid = self.get_profileid_for_nick(nickname)
         if _profileid == None:
-            return await ctx.respond(f':warning: An account with the nickname of "{_escaped_nickname}" has not been created yet.', ephemeral=True)
+            return await ctx.respond(
+                f':warning: An account with the nickname of "{_escaped_nickname}" could not be found.', 
+                ephemeral=True
+            )
         
         # Check nickname is owned by command caller
         _discord_uid = self.bot.db_discord.getOne(
@@ -1243,7 +1179,10 @@ class CogPlayerStats(discord.Cog):
         _escaped_nickname = self.bot.escape_discord_formatting(nickname)
         _profileid = self.get_profileid_for_nick(nickname)
         if _profileid == None:
-            return await ctx.respond(f':warning: An account with the nickname of "{_escaped_nickname}" has not been created yet.', ephemeral=True)
+            return await ctx.respond(
+                f':warning: An account with the nickname of "{_escaped_nickname}" could not be found.', 
+                ephemeral=True
+            )
         
         # Assign if real member, or remove if bot
         if member != self.bot.user:
