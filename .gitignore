@@ -4,7 +4,6 @@ config.cfg
 # Local dev files
 TODO.txt
 db_backups/
-assets/emojis/patches/BFMCspy.png
 
 # Python compiled bytecode and cache
 **/__pycache__/

@@ -223,7 +223,7 @@ class CogPlayerStats(discord.Cog):
 
         _legacy_data = self.bot.db_discord.getOne(
             "LegacyStats", 
-            ["dis_uid", "color_r", "color_g", "color_b"], 
+            ["dis_uid", "color_r", "color_g", "color_b", "first_seen"], 
             ("nickname=%s", [uniquenick])
         )
         if _legacy_data == None: return False # Legacy data doesn't exist
@@ -253,15 +253,15 @@ class CogPlayerStats(discord.Cog):
         _legacy_patch = self.bot.db_discord.getOne(
             "PlayerPatches", 
             ["id"], 
-            ("profileid=%s and patchid=%s", [_cur_player['profileid'], 0])
+            ("profileid=%s and patchid=%s", [_cur_player['profileid'], 1])
         )
         if _legacy_patch == None:
             self.bot.db_discord.insert(
                 "PlayerPatches", 
                 {
                     "profileid": _cur_player['profileid'], 
-                    "patchid": 0, 
-                    "date_earned": date.today()
+                    "patchid": 1, 
+                    "date_earned": _legacy_data['first_seen']
                 }
             )
         return True
@@ -467,7 +467,7 @@ class CogPlayerStats(discord.Cog):
         _patches_emoji = ""
         if _patches_data:
             for _p in _patches_data:
-                _patches_emoji += self.bot.config['Patches'][_p['patchid']][2]
+                _patches_emoji += self.bot.config['Patches'][str(_p['patchid'])][2]
         if _patches_emoji == "": _patches_emoji = None
         # Calculate K/D ratio
         if _player_data['deaths'] < 1: _player_data['deaths'] = 1 # Div. by 0 safeguard
@@ -699,13 +699,13 @@ class CogPlayerStats(discord.Cog):
             _e_patches.set_thumbnail(url=_rank_data[1])
             for _p in _patches_data:
                 _e_patches.add_field(
-                    name=f"{self.bot.config['Patches'][_p['patchid']][2]} {self.bot.config['Patches'][_p['patchid']][0]}:", 
-                    value=f"*Earned: {_p['date_earned'].strftime('%m/%d/%y')}*\n{self.bot.config['Patches'][_p['patchid']][1]}", 
+                    name=f"{self.bot.config['Patches'][str(_p['patchid'])][2]} {self.bot.config['Patches'][str(_p['patchid'])][0]}:", 
+                    value=f"*Earned: {_p['date_earned'].strftime('%m/%d/%y')}*\n{self.bot.config['Patches'][str(_p['patchid'])][1]}", 
                     inline=False
                 )
             _e_patches.set_footer(text="BFMCspy Official Stats")
             _embeds[_title] = _e_patches
-            _emoji = self.bot.config['Patches'][0][2]
+            _emoji = self.bot.config['Patches']['1'][2]
             _emoji = _emoji.split(":")[2][:-1]
             _emoji = await ctx.guild.fetch_emoji(_emoji)
             _select_options.append(
