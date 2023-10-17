@@ -1,7 +1,7 @@
 """main.py
 
 Main file to start Backstab
-Date: 10/15/2023
+Date: 10/16/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -22,8 +22,10 @@ def main():
     VERSION = "4.0.0b"
     AUTHORS = "Red-Thirten"
     COGS_LIST = [
+        "CogServerStatus",
+        "CogServerStats",
         "CogPlayerStats",
-        "CogServerStatus"
+        "CogClanStats"
     ]
 
     print(

@@ -1,7 +1,7 @@
 """bot.py
 
 A subclass of `discord.Bot` that adds ease-of-use instance variables and functions (e.g. database object).
-Date: 10/09/2023
+Date: 10/16/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -57,6 +57,19 @@ class BackstabBot(discord.Bot):
         minutes = seconds // 60
         seconds_remaining = seconds % 60
         return f"{minutes:02d}:{seconds_remaining:02d}"
+    
+    @staticmethod
+    def split_list(lst: list, chunk_size: int) -> list[list]:
+        """Split a list into smaller lists of equal size"""
+        if chunk_size <= 0:
+            return [lst]
+        else:
+            num_chunks = len(lst) // chunk_size
+            remainder = len(lst) % chunk_size
+            result = [lst[i*chunk_size:(i+1)*chunk_size] for i in range(num_chunks)]
+            if remainder:
+                result.append(lst[-remainder:])
+            return result
     
     @staticmethod
     def get_player_attr_list_str(players: list, attribute: str) -> str:

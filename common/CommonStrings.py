@@ -99,6 +99,11 @@ LEADERBOARD_STRINGS = {
     "time":     "Play Time",
     "kills":     "Kills"
 }
+CLAN_RANK_STRINGS = (
+    "Leader",
+    "Co-Leader",
+    "Member"
+)
 
 
 def get_iso3166_from_region(region_id: int) -> str:
@@ -111,3 +116,11 @@ def get_iso3166_from_region(region_id: int) -> str:
     
 def get_country_flag_url(region_id: int) -> str:
     return COUNTRY_FLAGS_URL.replace("<code>", get_iso3166_from_region(region_id))
+
+def get_clan_region_flag_url(clan_region: int) -> str:
+    _region_id = 1 # Default: America
+    if clan_region == 2: # Europe
+        _region_id = 65536
+    elif clan_region == 3: # Asia
+        _region_id = 2048
+    return get_country_flag_url(_region_id)

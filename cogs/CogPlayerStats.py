@@ -1,13 +1,12 @@
 """CogPlayerStats.py
 
 Handles tasks related to checking player stats and info.
-Date: 10/15/2023
+Date: 10/16/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
 
 import hashlib
-from datetime import date
 
 import discord
 from discord.ext import commands
@@ -15,7 +14,6 @@ from discord.ext.pages import Paginator, Page
 import common.CommonStrings as CS
 
 SECONDS_PER_HOUR = 60.0 * 60.0
-STATS_EPOCH_DATE_STR = "Oct. 20, 2023"
 
 
 async def get_uniquenicks(ctx: discord.AutocompleteContext):
@@ -89,18 +87,6 @@ class CogPlayerStats(discord.Cog):
                 "date_earned DATE NOT NULL"
             ")"
         )
-    
-    def split_list(self, lst: list, chunk_size: int) -> list[list]:
-        """Split a list into smaller lists of equal size"""
-        if chunk_size <= 0:
-            return [lst]
-        else:
-            num_chunks = len(lst) // chunk_size
-            remainder = len(lst) % chunk_size
-            result = [lst[i*chunk_size:(i+1)*chunk_size] for i in range(num_chunks)]
-            if remainder:
-                result.append(lst[-remainder:])
-            return result
 
     def is_medal_earned(self, earned_medals: int, medal_name: str) -> bool:
         if medal_name not in CS.MEDALS_DATA:
@@ -274,23 +260,17 @@ class CogPlayerStats(discord.Cog):
         Runs when the cog is successfully cached within the Discord API.
         """
         self.bot.log("[PlayerStats] Successfully cached!")
-        
-        # Check that all channels in the config are valid
-        _cfg_sub_keys = [
-            'PlayerStatsTextChannelID'
-        ]
-        await self.bot.check_channel_ids_for_cfg_key('PlayerStats', _cfg_sub_keys)
 
 
-    """Slash Command Group: /stats
+    """Slash Command Group: /player
     
-    A group of commands related to checking stats.
+    A group of commands related to checking player stats.
     """
-    stats = discord.SlashCommandGroup("stats", "Commands related to checking player stats")
+    player = discord.SlashCommandGroup("player", "Commands related to checking player stats")
 
-    @stats.command(name = "player", description="Displays a specific player's BF2:MC Online stats")
+    @player.command(name = "stats", description="Displays a specific player's BF2:MC Online stats")
     @commands.cooldown(1, 180, commands.BucketType.member)
-    async def player(
+    async def stats(
         self,
         ctx,
         nickname: discord.Option(
@@ -301,7 +281,7 @@ class CogPlayerStats(discord.Cog):
             required=True
         )
     ):
-        """Slash Command: /stats player
+        """Slash Command: /player stats
         
         Displays a specific player's BF2:MC Online stats.
         """
@@ -778,7 +758,7 @@ class CogPlayerStats(discord.Cog):
     class PlayerStatsView(discord.ui.View):
         """Discord UI View: Player Stats
         
-        Handles the `/stats player` view which includes a select menu of passed options
+        Handles the `/player stats` view which includes a select menu of passed options
         to display various passed embed "pages".
         Automatically disables list selections after 180 sec.
         """
@@ -799,7 +779,7 @@ class CogPlayerStats(discord.Cog):
                 view=self
             )
 
-    @stats.command(name = "leaderboard", description="See a top 50 leaderboard for a particular stat in BF2:MC Online")
+    @player.command(name = "leaderboard", description="See a top 50 leaderboard for a particular stat in BF2:MC Online")
     @commands.cooldown(1, 180, commands.BucketType.channel)
     async def leaderboard(
         self,
@@ -819,7 +799,7 @@ class CogPlayerStats(discord.Cog):
             required=True
         )
     ):
-        """Slash Command: /stats leaderboard
+        """Slash Command: /player leaderboard
         
         Displays a top 50 leaderboard of the specified BF2:MC Online stat.
         """
@@ -836,12 +816,13 @@ class CogPlayerStats(discord.Cog):
             [stat, "DESC"], # Order highest first
             [0, 50] # Limit to top 50 players
         )
+        _title = f":first_place:  BF2:MC Online | Top Player {CS.LEADERBOARD_STRINGS[stat]} Leaderboard  :first_place:"
         if _dbEntries:
-            _dbEntries = self.split_list(_dbEntries, 10) # Split into pages of 10 entries each
+            _dbEntries = self.bot.split_list(_dbEntries, 10) # Split into pages of 10 entries each
             for _page in _dbEntries:
                 _embed = discord.Embed(
-                    title=f":first_place:  BF2:MC Online | Top {CS.LEADERBOARD_STRINGS[stat]} Leaderboard  :first_place:",
-                    description=f"*Top 50 players across all servers.*",
+                    title=_title,
+                    description="*Top 50 players across all servers.*",
                     color=discord.Colour.gold()
                 )
                 _nicknames = "```\n"
@@ -872,7 +853,7 @@ class CogPlayerStats(discord.Cog):
                 _pages.append(Page(embeds=[_embed]))
         else:
             _embed = discord.Embed(
-                title=f":first_place:  BF2:MC Online | Top {CS.LEADERBOARD_STRINGS[stat]} Leaderboard*  :first_place:",
+                title=_title,
                 description="No stats yet.",
                 color=discord.Colour.gold()
             )
@@ -880,142 +861,11 @@ class CogPlayerStats(discord.Cog):
         _paginator = Paginator(pages=_pages, author_check=False)
         await _paginator.respond(ctx.interaction)
 
-    """Slash Command Sub-Group: /stats mostplayed
-    
-    A sub-group of commands related to checking "most played" stats.
-    """
-    mostplayed = stats.create_subgroup("mostplayed", 'Commands related to checking "most played" related stats')
-
-    @mostplayed.command(name = "map", description="See which maps have been played the most for a given gamemode")
-    @commands.cooldown(1, 180, commands.BucketType.channel)
-    async def map(
-        self, 
-        ctx, 
-        gamemode: discord.Option(
-            str, 
-            description="Which gamemode to see the most played maps for", 
-            choices=["Conquest", "Capture the Flag"], 
-            required=True
-        )
-    ):
-        """Slash Command: /stats mostplayed map
-        
-        Displays which maps have been played the most for a given gamemode.
-        """
-        # Determine gametype ID
-        _gt_id = 1
-        if gamemode == "Capture the Flag":
-            _gt_id = 2
-        
-        # Get all games for that gametype
-        _games = self.bot.db_backend.getAll(
-            "GameStats", 
-            ["mapid"], 
-            ("gametype = %s", [_gt_id])
-        )
-        if _games == None:
-            return await ctx.respond(f":warning: No data for {gamemode} yet. Please try again later.", ephemeral=True)
-        
-        # Create a dictionary to count the occurrences of each 'mapid'
-        _mapid_counts = {}
-        for _g in _games:
-            _mapid_counts[_g['mapid']] = _mapid_counts.get(_g['mapid'], 0) + 1
-
-        # Sort the 'mapid' counts in descending order
-        _sorted_mapid_counts = sorted(_mapid_counts.items(), key=lambda x: x[1], reverse=True)
-
-        # Limit to the top 5 most occurring 'mapid' values and their counts
-        _sorted_mapid_counts = _sorted_mapid_counts[:5]
-        
-        _maps = "```\n"
-        _games = "```\n"
-        for _i, _map_data in enumerate(_sorted_mapid_counts):
-            _maps += f"{_i+1}. {CS.MAP_STRINGS[_map_data[0]]}\n"
-            _games += f"{self.bot.infl.no('game', _map_data[1]).rjust(11)}\n"
-        _maps += "```"
-        _games += "```"
-        _url_map_name = CS.MAP_STRINGS[_sorted_mapid_counts[0][0]].lower().replace(" ", "")
-        _embed = discord.Embed(
-            title=f"🗺  Most Played *{gamemode}* Maps",
-            description=f"*Currently, the most played {gamemode} maps are...*",
-            color=discord.Colour.dark_blue()
-        )
-        _embed.add_field(name="Map:", value=_maps, inline=True)
-        _embed.add_field(name="Games Played:", value=_games, inline=True)
-        _embed.add_field(name="Most Played Map:", value="", inline=False)
-        _embed.set_image(url=CS.MAP_IMAGES_URL.replace("<map_name>", _url_map_name))
-        _embed.set_footer(text="BFMCspy Official Stats")
-        await ctx.respond(embed=_embed)
-
-    """Slash Command Sub-Group: /stats total
-    
-    A sub-group of commands related to checking "total count" stats.
-    """
-    total = stats.create_subgroup("total", 'Commands related to checking "total count" related stats')
-    
-    @total.command(name = "playercount", description="Displays the total count of unique registered players")
-    @commands.cooldown(1, 60, commands.BucketType.channel)
-    async def playercount(self, ctx):
-        """Slash Command: /stats total playercount
-        
-        Displays the total count of unique registered players by IP address.
-        """
-        _dbResult = self.bot.db_backend.call(
-            "queryPlayerCount",
-            [True]
-        )
-        
-        _embed = discord.Embed(
-            title=f"👥︎  Total Player Count",
-            description=f"There are currently **{_dbResult[0][0]}** uniquely registered players",
-            color=discord.Colour.dark_blue()
-        )
-        _embed.set_footer(text="BFMCspy Official Stats")
-        await ctx.respond(embed=_embed)
-    
-    @total.command(name = "games", description="Displays the total number of games played across all servers")
-    @commands.cooldown(1, 60, commands.BucketType.channel)
-    async def games(
-        self, 
-        ctx, 
-        clan_games_filter: discord.Option(
-            int, 
-            name="game_types",
-            description="Which types of games to count", 
-            choices=[
-                discord.OptionChoice("Only public games", value=0), 
-                discord.OptionChoice("Only clan games", value=1),
-                discord.OptionChoice("Both public & clan games", value=2)
-            ],
-            default=2
-        )
-    ):
-        """Slash Command: /stats total games
-        
-        Displays the total number of games played across all servers.
-        Option option to restrict to just public or clan games.
-        """
-        _dbResult = self.bot.db_backend.call(
-            "queryGameCount",
-            [clan_games_filter]
-        )
-        
-        if clan_games_filter == 0:      _filter = "Public"
-        elif clan_games_filter == 1:    _filter = "Clan"
-        else:                           _filter = "Public & Clan"
-        _embed = discord.Embed(
-            title=f"🎮  Total Games ({_filter})",
-            description=f"**{_dbResult[0][0]}** unique games have been played across all servers since {STATS_EPOCH_DATE_STR}",
-            color=discord.Colour.dark_blue()
-        )
-        _embed.set_footer(text="BFMCspy Official Stats")
-        await ctx.respond(embed=_embed)
-
-    """Slash Command Sub-Group: /stats nickname
+    """Slash Command Sub-Group: /player nickname
     
     A sub-group of commands related to claiming, customizing, and moderating a nickname.
     """
-    nickname = stats.create_subgroup("nickname", "Commands related to claiming, customizing, and moderating a nickname")
+    nickname = player.create_subgroup("nickname", "Commands related to claiming, customizing, and moderating a nickname")
     
     @nickname.command(name = "claim", description="Claim ownership of an existing nickname")
     @commands.cooldown(5, 300, commands.BucketType.member)
