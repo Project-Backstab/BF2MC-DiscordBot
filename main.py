@@ -1,7 +1,7 @@
 """main.py
 
 Main file to start Backstab
-Date: 10/16/2023
+Date: 10/18/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -157,7 +157,7 @@ def main():
         )
         _embed.set_author(
             name="BackStab Bot", 
-            icon_url="https://raw.githubusercontent.com/lilkingjr1/backstab-discord-bot/main/assets/icon.png"
+            icon_url=CS.BOT_ICON_URL
         )
         _embed.set_thumbnail(url="https://cdn.discordapp.com/icons/502923049541304320/4d8d584de5d9baec281d4861c6b11781.webp?size=4096")
         # Construct string of bot commands for display

@@ -1,7 +1,7 @@
 """CogPlayerStats.py
 
 Handles tasks related to checking player stats and info.
-Date: 10/16/2023
+Date: 10/18/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -516,7 +516,7 @@ class CogPlayerStats(discord.Cog):
             _color = discord.Colour.random(seed=_player_data['profileid'])
         # Set owner if applicable
         _author_name = "BF2:MC Online  |  Player Stats"
-        _author_url = "https://raw.githubusercontent.com/lilkingjr1/backstab-discord-bot/main/assets/icon.png"
+        _author_url = CS.BOT_ICON_URL
         if _discord_data:
             _owner = self.bot.get_user(_discord_data['discord_uid'])
             if _owner:
@@ -1096,7 +1096,7 @@ class CogPlayerStats(discord.Cog):
         _created += "```"
         _last_seen += "```"
         _footer_text = "BF2:MC Online  |  Player Stats"
-        _footer_icon_url = "https://raw.githubusercontent.com/lilkingjr1/backstab-discord-bot/main/assets/icon.png"
+        _footer_icon_url = CS.BOT_ICON_URL
         _embed = discord.Embed(
             title=f"{_member_name}'s BF2:MC Online Nicknames",
             color=member.color

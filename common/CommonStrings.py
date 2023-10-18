@@ -1,11 +1,12 @@
 """CommonStrings.py
 
 Collection of commonly used public static final strings and related functions.
-Date: 10/16/2023
+Date: 10/18/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
 
+BOT_ICON_URL = "https://raw.githubusercontent.com/lilkingjr1/backstab-discord-bot/main/assets/icon.png"
 COUNTRY_FLAGS_URL = "https://flagcdn.com/w40/<code>.png"
 LANG_FLAGS_URL = "https://www.unknown.nu/flags/images/<code>-100"
 GM_THUMBNAILS_URL = "https://raw.githubusercontent.com/lilkingjr1/backstab-discord-bot/main/assets/gamemode_thumbnails/<gamemode>.png"
