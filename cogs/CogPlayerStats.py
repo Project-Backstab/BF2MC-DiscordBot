@@ -778,7 +778,7 @@ class CogPlayerStats(discord.Cog):
             )
 
     @player.command(name = "leaderboard", description="See a top 50 leaderboard for a particular stat in BF2:MC Online")
-    @commands.cooldown(1, 180, commands.BucketType.channel)
+    @commands.cooldown(8, 300, commands.BucketType.channel)
     async def leaderboard(
         self,
         ctx,
@@ -787,12 +787,14 @@ class CogPlayerStats(discord.Cog):
             name="leaderboard", 
             description="Leaderboard to display", 
             choices=[
-                discord.OptionChoice("Score", value='score'),
-                discord.OptionChoice("Wins", value='mv'),
-                discord.OptionChoice("MVP", value='ttb'),
-                discord.OptionChoice("PPH", value='pph'),
-                discord.OptionChoice("Play Time", value='time'),
-                discord.OptionChoice("Kills", value='kills')
+                discord.OptionChoice(CS.LEADERBOARD_STRINGS['rank'], value='rank'),
+                discord.OptionChoice(CS.LEADERBOARD_STRINGS['score'], value='score'),
+                discord.OptionChoice(CS.LEADERBOARD_STRINGS['mv'], value='mv'),
+                discord.OptionChoice(CS.LEADERBOARD_STRINGS['ttb'], value='ttb'),
+                discord.OptionChoice(CS.LEADERBOARD_STRINGS['pph'], value='pph'),
+                discord.OptionChoice(CS.LEADERBOARD_STRINGS['time'], value='time'),
+                discord.OptionChoice(CS.LEADERBOARD_STRINGS['kills'], value='kills'),
+                discord.OptionChoice(CS.LEADERBOARD_STRINGS['vehicles'], value='vehicles')
             ], 
             required=True
         )
@@ -803,15 +805,22 @@ class CogPlayerStats(discord.Cog):
         """
         _rank = 1
         _pages = []
+        _db_table = "PlayerStats"
+        _db_columns = [stat]
+        _order = "DESC"
+        if stat == 'rank': # Special query for overall rank
+            _db_table = "Leaderboard_rank"
+            _db_columns.append("ran")
+            _order = "ASC"
         _dbEntries = self.bot.db_backend.leftJoin(
-            ("PlayerStats", "Players"), 
+            (_db_table, "Players"), 
             (
-                [stat], 
+                _db_columns, 
                 ["uniquenick"]
             ), 
             ("profileid", "profileid"), 
             None, 
-            [stat, "DESC"], # Order highest first
+            [stat, _order], # Order highest first
             [0, 50] # Limit to top 50 players
         )
         _title = f":first_place:  BF2:MC Online | Top Player {CS.LEADERBOARD_STRINGS[stat]} Leaderboard  :first_place:"
@@ -828,7 +837,9 @@ class CogPlayerStats(discord.Cog):
                 for _e in _page:
                     _rank_str = f"#{_rank}"
                     _nicknames += f"{_rank_str.ljust(3)} | {_e['uniquenick']}\n"
-                    if stat == 'score':
+                    if stat == 'rank':
+                        _stats += f"{CS.RANK_DATA[_e['ran']-1][0].rjust(20)}\n"
+                    elif stat == 'score':
                         _stats += f"{str(_e[stat]).rjust(6)} pts.\n"
                     elif stat == 'mv':
                         _stats += f" {self.bot.infl.no('game', _e[stat])} won\n"
@@ -840,6 +851,8 @@ class CogPlayerStats(discord.Cog):
                         _stats += f"{str(int(_e[stat]/SECONDS_PER_HOUR)).rjust(5)} hrs.\n"
                     elif stat == 'kills':
                         _stats += f"{str(_e[stat]).rjust(8)}\n"
+                    elif stat == 'vehicles':
+                        _stats += f"{str(_e[stat]).rjust(6)} destroyed\n"
                     else:
                         _stats += "\n"
                     _rank += 1

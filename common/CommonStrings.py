@@ -94,12 +94,14 @@ RIBBONS_DATA = {
     "Top_Player_20":        ("20 Games Top Player", "Finish top player in 20 game rounds")
 }
 LEADERBOARD_STRINGS = {
+    "rank":     "Rank",
     "score":    "Score",
     "mv":       "Major Victories",
     "ttb":      "MVP",
     "pph":      "Points per Hour",
     "time":     "Play Time",
-    "kills":     "Kills"
+    "kills":    "Kills",
+    "vehicles": "Vehicles"
 }
 CLAN_RANK_STRINGS = (
     "Leader",
