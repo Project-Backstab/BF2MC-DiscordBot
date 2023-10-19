@@ -103,10 +103,26 @@ class CogClanStats(discord.Cog):
                 f':warning: This clan has no members? Wat.', 
                 #ephemeral=True
             )
+        
+        ## Get clan rank
+        _clan_rank = self.bot.db_backend.getOne(
+            "Leaderboard_clan",
+            ["rank"], 
+            ("clanid=%s", [_clan_data['clanid']])
+        )
+        if _clan_rank: 
+            _clan_rank = f"#{_clan_rank['rank']}"
+        else:
+            _clan_rank = ""
 
         ## Calculate additional data
         # Determine embed color
         _color = discord.Colour.random(seed=_clan_data['clanid'])
+        # Calculate total games & win percentage
+        _total_games = _clan_data['wins'] + _clan_data['losses'] + _clan_data['draws']
+        _win_percentage = (_clan_data['wins'] / max(_total_games, 1)) * 100
+        _win_percentage = round(_win_percentage, 2)
+        _win_percentage = str(_win_percentage) + "%"
         
         ## Build embeds/pages
         _embeds = {}
@@ -116,6 +132,7 @@ class CogClanStats(discord.Cog):
         # Summary
         _title = "Summary"
         _desc = f"**Tag: {_escaped_tag}**"
+        _desc += f"\n**Rank: {_clan_rank}**"
         _desc += f"\n\n{_clan_data['homepage']}"
         _desc += f"\n\n{_clan_data['info']}"
         _e_summary = discord.Embed(
@@ -127,7 +144,11 @@ class CogClanStats(discord.Cog):
             name=_author_name, 
             icon_url=_author_url
         )
-        _e_summary.add_field(name="Score:", value=_clan_data['score'], inline=False)
+        _e_summary.set_thumbnail(url=CS.CLAN_THUMB_URL)
+        _e_summary.add_field(name="Members:", value=len(_clan_members), inline=False)
+        _e_summary.add_field(name="Score:", value=_clan_data['score'], inline=True)
+        _e_summary.add_field(name="Games:", value=_total_games, inline=True)
+        _e_summary.add_field(name="Win Percentage:", value=_win_percentage, inline=True)
         _e_summary.add_field(name="Wins:", value=_clan_data['wins'], inline=True)
         _e_summary.add_field(name="Losses:", value=_clan_data['losses'], inline=True)
         _e_summary.add_field(name="Draws:", value=_clan_data['draws'], inline=True)
@@ -143,6 +164,7 @@ class CogClanStats(discord.Cog):
         # Members
         _title = "Members"
         _desc = f"**Tag: {_escaped_tag}**"
+        _desc += f"\n**Rank: {_clan_rank}**"
         _desc += f"\n### Clan {_title}:"
         _members = "```\n"
         _roles = "```\n"
@@ -160,6 +182,7 @@ class CogClanStats(discord.Cog):
             name=_author_name, 
             icon_url=_author_url
         )
+        _e_members.set_thumbnail(url=CS.CLAN_THUMB_URL)
         _e_members.add_field(name="Nickname:", value=_members, inline=True)
         _e_members.add_field(name="Role:", value=_roles, inline=True)
         _e_members.set_footer(text=f"Established {_clan_data['created_at'].strftime('%m/%d/%Y')} -- BFMCspy Official Stats")
@@ -239,7 +262,8 @@ class CogClanStats(discord.Cog):
                 _stats = "```\n"
                 for _e in _page:
                     _rank_str = f"#{_rank}"
-                    _clan_names += f"{_rank_str.ljust(3)} | [{_e['tag']}] {_e['name']}\n"
+                    _tag_str = f"[{_e['tag']}]"
+                    _clan_names += f"{_rank_str.ljust(3)} | {_tag_str.ljust(5)} {_e['name']}\n"
                     if stat == 'score':
                         _stats += f"{str(_e[stat]).rjust(6)} pts.\n"
                     else:

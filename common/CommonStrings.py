@@ -12,6 +12,7 @@ LANG_FLAGS_URL = "https://www.unknown.nu/flags/images/<code>-100"
 GM_THUMBNAILS_URL = "https://raw.githubusercontent.com/lilkingjr1/backstab-discord-bot/main/assets/gamemode_thumbnails/<gamemode>.png"
 MAP_IMAGES_URL = "https://raw.githubusercontent.com/lilkingjr1/backstab-discord-bot/main/assets/map_images/<map_name>.png"
 RANK_IMAGES_URL = "https://raw.githubusercontent.com/Project-Backstab/BF2MC-DiscordBot/main/assets/rank_images/rank<rank_id>.png"
+CLAN_THUMB_URL = "https://raw.githubusercontent.com/lilkingjr1/backstab-discord-bot/main/assets/clan_images/thumbnail.png"
 STATUS_STRINGS = {
     "online":   "SERVERS: ONLINE 🟢",
     "offline":  "SERVERS: OFFLINE 🔴",
