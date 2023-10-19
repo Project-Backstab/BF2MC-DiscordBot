@@ -360,16 +360,13 @@ class CogPlayerStats(discord.Cog):
             ("profileid=%s", [_player_data['profileid']])
         )
         
-        ## Get match win/lose/draw data and sort by date
-        _match_results_data = self.bot.db_backend.call(
-            # "queryPlayerWinLoseDraw", 
-            "queryGameStatsResults",
+        ## Get match match history, sorted by date
+        _match_history_data = self.bot.db_backend.call(
+            "queryPlayerGameResults",
             [_player_data['profileid']]
         )
-        _match_wld_data = self.bot.db_backend.call(
-            "queryPlayerWinLoseDraw", 
-            [_player_data['profileid']]
-        )
+        # Remove games where the player did not select a team
+        _match_history_data = [_m for _m in _match_history_data if _m[1] != -1]
 
         ## Get match gamemode data
         _match_gamemode_data = self.bot.db_backend.call(
@@ -450,19 +447,17 @@ class CogPlayerStats(discord.Cog):
                 _patches_emoji += self.bot.config['Patches'][str(_p['patchid'])][2]
         if _patches_emoji == "": _patches_emoji = None
         # Calculate K/D ratio
-        if _player_data['deaths'] < 1: _player_data['deaths'] = 1 # Div. by 0 safeguard
-        _kd_ratio = _player_data['kills'] / _player_data['deaths']
+        _kd_ratio = _player_data['kills'] / max(_player_data['deaths'], 1)
         _kd_ratio = round(_kd_ratio, 2)
         # Calculate average score per game
-        if _player_data['ngp'] < 1: _player_data['ngp'] = 1 # Div. by 0 safeguard
-        _avg_score_per_game = _player_data['score'] / _player_data['ngp']
+        _avg_score_per_game = _player_data['score'] / max(_player_data['ngp'], 1)
         _avg_score_per_game = round(_avg_score_per_game, 2)
         # Calculate win percentage
         _wins = 0
-        for _m in _match_wld_data:
-            if _m[5] == "win":
+        for _m in _match_history_data:
+            if _m[2] in [1, 2]:
                 _wins += 1
-        _win_percentage = (_wins / _player_data['ngp']) * 100
+        _win_percentage = (_wins / max(len(_match_history_data), 1)) * 100
         _win_percentage = round(_win_percentage, 2)
         _win_percentage = str(_win_percentage) + "%"
         # Calculate play time in hours
@@ -498,12 +493,12 @@ class CogPlayerStats(discord.Cog):
         _fav_kit = max(_kit_spawns, key=lambda k: _kit_spawns[k])
         # Build match history string
         _match_history = ""
-        for _m in reversed(_match_results_data):
-            if _m[4] == 'win':
+        for _m in reversed(_match_history_data[:10]):
+            if _m[2] in [1, 2]: # Major or Minor Victory
                 _match_history += self.bot.config['Emoji']['MatchHistory']['Win'] + " "
-            elif _m[4] == 'lose':
+            elif _m[2] == 0: #Loss
                 _match_history += self.bot.config['Emoji']['MatchHistory']['Loss'] + " "
-            elif _m[4] == 'draw':
+            elif _m[2] == 3: # Draw
                 _match_history += self.bot.config['Emoji']['MatchHistory']['Draw'] + " "
         if _match_history != "":
             _match_history = "Past ⏪ " + _match_history + "⏪ Recent"
@@ -523,8 +518,11 @@ class CogPlayerStats(discord.Cog):
                 _author_name = f"{_owner.display_name}'s Player Stats"
                 _author_url = _owner.display_avatar.url
         # Set clan if applicable
+        _clan_name = ""
         if len(_clan_data) > 0:
             _escaped_nickname = f"{_clan_data[0][2]} {_escaped_nickname}"
+            _clan_name = self.bot.escape_discord_formatting(_clan_data[0][1])
+            _clan_name = f"\nMember of {_clan_name}"
         
         ## Build embeds/pages
         _embeds = {}
@@ -533,7 +531,7 @@ class CogPlayerStats(discord.Cog):
         _title = "Summary"
         _e_summary = discord.Embed(
             title=_escaped_nickname,
-            description=f"***{_rank_data[0]}***",
+            description=f"***{_rank_data[0]}***{_clan_name}",
             color=_color
         )
         _e_summary.set_author(
