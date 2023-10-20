@@ -128,7 +128,7 @@ class CogClanStats(discord.Cog):
         _embeds = {}
         _select_options = []
         _author_name = "BF2:MC Online  |  Clan Stats"
-        _author_url = CS.get_clan_region_flag_url(_clan_data['region'])
+        _author_url = CS.CLAN_REGION_DATA[_clan_data['region']-1][1]
         # Summary
         _title = "Summary"
         _desc = f"**Tag: {_escaped_tag}**"
@@ -152,6 +152,7 @@ class CogClanStats(discord.Cog):
         _e_summary.add_field(name="Wins:", value=_clan_data['wins'], inline=True)
         _e_summary.add_field(name="Losses:", value=_clan_data['losses'], inline=True)
         _e_summary.add_field(name="Draws:", value=_clan_data['draws'], inline=True)
+        _e_summary.add_field(name="Region:", value=CS.CLAN_REGION_DATA[_clan_data['region']-1][0], inline=False)
         _e_summary.set_footer(text=f"Established {_clan_data['created_at'].strftime('%m/%d/%Y')} -- BFMCspy Official Stats")
         _embeds[_title] = _e_summary
         _select_options.append(

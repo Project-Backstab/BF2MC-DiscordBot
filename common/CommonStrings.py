@@ -13,6 +13,7 @@ GM_THUMBNAILS_URL = "https://raw.githubusercontent.com/lilkingjr1/backstab-disco
 MAP_IMAGES_URL = "https://raw.githubusercontent.com/lilkingjr1/backstab-discord-bot/main/assets/map_images/<map_name>.png"
 RANK_IMAGES_URL = "https://raw.githubusercontent.com/Project-Backstab/BF2MC-DiscordBot/main/assets/rank_images/rank<rank_id>.png"
 CLAN_THUMB_URL = "https://raw.githubusercontent.com/lilkingjr1/backstab-discord-bot/main/assets/clan_images/thumbnail.png"
+CLAN_REGION_URL = "https://raw.githubusercontent.com/lilkingjr1/backstab-discord-bot/main/assets/clan_images/<region>.png"
 STATUS_STRINGS = {
     "online":   "SERVERS: ONLINE 🟢",
     "offline":  "SERVERS: OFFLINE 🔴",
@@ -108,6 +109,11 @@ CLAN_RANK_STRINGS = (
     "Co-Leader",
     "Member"
 )
+CLAN_REGION_DATA = (
+    ("Americas", CLAN_REGION_URL.replace("<region>", "americas")),
+    ("Europe", CLAN_REGION_URL.replace("<region>", "europe")),
+    ("Asia", CLAN_REGION_URL.replace("<region>", "asia"))
+)
 
 
 def get_iso3166_from_region(region_id: int) -> str:
@@ -120,11 +126,3 @@ def get_iso3166_from_region(region_id: int) -> str:
     
 def get_country_flag_url(region_id: int) -> str:
     return COUNTRY_FLAGS_URL.replace("<code>", get_iso3166_from_region(region_id))
-
-def get_clan_region_flag_url(clan_region: int) -> str:
-    _region_id = 1 # Default: America
-    if clan_region == 2: # Europe
-        _region_id = 65536
-    elif clan_region == 3: # Asia
-        _region_id = 2048
-    return get_country_flag_url(_region_id)
