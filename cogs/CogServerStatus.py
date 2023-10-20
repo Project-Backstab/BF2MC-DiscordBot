@@ -1,7 +1,7 @@
 """CogServerStatus.py
 
 Handles tasks related to checking server status and info.
-Date: 10/18/2023
+Date: 10/19/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -27,6 +27,7 @@ class CogServerStatus(discord.Cog):
         """Get Server Statistic Embeds
         
         Returns a list of Discord Embeds that each display each server's current statistics.
+        Servers are listed in order of their player count, from highest to lowest.
         """
         # Check for missing query data
         if servers == None:
@@ -60,9 +61,12 @@ class CogServerStatus(discord.Cog):
             _embed.set_footer(text=f"Data fetched at: {self.bot.last_query.strftime('%I:%M:%S %p UTC')} -- {self.bot.config['API']['HumanURL']}")
             return [_embed]
 
-        # Default - Build server stat embeds
+        # Default - Build server status embeds
         _embeds = []
-        for _s in servers:
+        # Sort by player count and limit to top 3 servers
+        _sorted_servers = sorted(servers, key=lambda x: x['numplayers'], reverse=True)
+        _sorted_servers = _sorted_servers[:3]
+        for _s in _sorted_servers:
             _embeds.append(self.bot.get_server_status_embed(_s))
         
         return _embeds
@@ -162,7 +166,7 @@ class CogServerStatus(discord.Cog):
         ]
         await self.bot.check_channel_ids_for_cfg_key('ServerStatus', _cfg_sub_keys)
 
-        # Get handle for server stats text channel
+        # Get handle for server status text channel
         _text_channel = self.bot.get_channel(self.bot.config['ServerStatus']['ServerStatusTextChannelID'])
 
         # Get status message (if it exists) from message history (if we haven't already)
@@ -193,12 +197,13 @@ class CogServerStatus(discord.Cog):
         ## Query API for servers
         _servers = await self.bot.query_api("servers/live")
 
-        ## Create live server list (excluding dead and unverified servers) & calculate players online
+        ## Create live server list (excluding dead/unverified/clan servers) & calculate players online
         _live_servers = []
         _total_players = 0
         if _servers != None:
             for _server in _servers:
-                if _server['is_alive'] and _server['verified']:
+                if (_server['is_alive'] and _server['verified']
+                        and _server['c0'] < 1 and _server['c1'] < 1):
                     _live_servers.append(_server)
                     _total_players += _server['numplayers']
         
@@ -226,17 +231,19 @@ class CogServerStatus(discord.Cog):
             _live_servers = None
 
         ## Update stats channel post
+        _msg = f"## Total Players Online: {self.total_online}"
+        _msg += "\n*Note: Only the top 3 most populated servers are displayed*"
         # Post already exists
         if self.status_msg != None:
             try:
-                await self.status_msg.edit(f"## Total Players Online: {self.total_online}", embeds=self.get_server_status_embeds(_live_servers))
+                await self.status_msg.edit(_msg, embeds=self.get_server_status_embeds(_live_servers))
             except Exception as e:
-                self.bot.log("[WARNING] Unable to edit server stats message. Is the Discord API down?")
+                self.bot.log("[WARNING] Unable to edit server status message. Is the Discord API down?")
                 self.bot.log(f"Exception:\n{e}", time=False)
         # First post needs to be made
         else:
             _text_channel = self.bot.get_channel(self.bot.config['ServerStatus']['ServerStatusTextChannelID'])
-            self.status_msg = await _text_channel.send(f"## Total Players Online: {self.total_online}", embeds=self.get_server_status_embeds(_live_servers))
+            self.status_msg = await _text_channel.send(_msg, embeds=self.get_server_status_embeds(_live_servers))
         
         ## Check LFG users
         await self.do_lfg_check(_live_servers)

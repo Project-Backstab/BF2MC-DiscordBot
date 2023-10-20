@@ -1,7 +1,7 @@
 """CogClanStats.py
 
 Handles tasks related to checking clan stats and info.
-Date: 10/16/2023
+Date: 10/19/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """

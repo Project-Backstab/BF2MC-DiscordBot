@@ -1,7 +1,7 @@
 """bot.py
 
 A subclass of `discord.Bot` that adds ease-of-use instance variables and functions (e.g. database object).
-Date: 10/16/2023
+Date: 10/19/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -239,7 +239,7 @@ class BackstabBot(discord.Bot):
         _embed.add_field(name="Time Elapsed:", value=self.sec_to_mmss(server_data['timeelapsed']), inline=True)
         _embed.add_field(name="Time Limit:", value=self.sec_to_mmss(server_data['timelimit']), inline=True)
         _embed.add_field(
-            name=CS.TEAM_STRINGS[server_data['team0']], 
+            name=CS.TEAM_STRINGS[server_data['team0']][0], 
             value=self.get_team_score_str(server_data['gametype'], server_data['score0']), 
             inline=False
         )
@@ -247,7 +247,7 @@ class BackstabBot(discord.Bot):
         _embed.add_field(name="Score:", value=self.get_player_attr_list_str(_team1, 'score'), inline=True)
         _embed.add_field(name="Deaths:", value=self.get_player_attr_list_str(_team1, 'deaths'), inline=True)
         _embed.add_field(
-            name=CS.TEAM_STRINGS[server_data['team1']],  
+            name=CS.TEAM_STRINGS[server_data['team1']][0],  
             value=self.get_team_score_str(server_data['gametype'], server_data['score1']), 
             inline=False
         )
