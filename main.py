@@ -19,7 +19,7 @@ from src import BackstabBot
 import common.CommonStrings as CS
 
 def main():
-    VERSION = "4.0.2"
+    VERSION = "4.0.3"
     AUTHORS = "Red-Thirten"
     COGS_LIST = [
         "CogServerStatus",
@@ -113,6 +113,9 @@ def main():
         # Return if message not in config channels
         if message.channel.id not in bot.config['Translate']['TextChannelIDs']:
             return 
+        # Return if message in blacklist
+        if message.content in bot.config['Translate']['Blacklist']:
+            return
         # Try to detect message language and return if error
         try:
             _from_lang = LangDetect(message.content)
