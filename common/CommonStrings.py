@@ -1,79 +1,128 @@
 """CommonStrings.py
 
 Collection of commonly used public static final strings and related functions.
-Date: 08/02/2023
+Date: 10/18/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
 
-COUNTRY_FLAGS_URL = "https://stats.bf2mc.net/static/img/flags/<code>.png"
+BOT_ICON_URL = "https://raw.githubusercontent.com/lilkingjr1/backstab-discord-bot/main/assets/icon.png"
+COUNTRY_FLAGS_URL = "https://flagcdn.com/w40/<code>.png"
 LANG_FLAGS_URL = "https://www.unknown.nu/flags/images/<code>-100"
 GM_THUMBNAILS_URL = "https://raw.githubusercontent.com/lilkingjr1/backstab-discord-bot/main/assets/gamemode_thumbnails/<gamemode>.png"
 MAP_IMAGES_URL = "https://raw.githubusercontent.com/lilkingjr1/backstab-discord-bot/main/assets/map_images/<map_name>.png"
+RANK_IMAGES_URL = "https://raw.githubusercontent.com/Project-Backstab/BF2MC-DiscordBot/main/assets/rank_images/rank<rank_id>.png"
+CLAN_THUMB_URL = "https://raw.githubusercontent.com/lilkingjr1/backstab-discord-bot/main/assets/clan_images/thumbnail.png"
+CLAN_REGION_URL = "https://raw.githubusercontent.com/lilkingjr1/backstab-discord-bot/main/assets/clan_images/<region>.png"
 STATUS_STRINGS = {
-    "online": "SERVERS: ONLINE 🟢",
-    "offline": "SERVERS: OFFLINE 🔴",
-    "unknown": "SERVERS: UNKNOWN"
+    "online":   "SERVERS: ONLINE 🟢",
+    "offline":  "SERVERS: OFFLINE 🔴",
+    "unknown":  "SERVERS: UNKNOWN"
 }
 GM_STRINGS = {
-    "conquest": "Conquest",
-    "capturetheflag": "Capture the Flag"
+    "conquest":         ("Conquest", 1),
+    "capturetheflag":   ("Capture the Flag", 2)
 }
 TEAM_STRINGS = {
-    "US": ":flag_us:  United States:",
-    "CH": ":flag_cn:  China:",
-    "AC": ":flag_ir:  Middle Eastern Coalition:",
-    "EU": ":flag_eu:  European Union:"
+    "US": (":flag_us:  United States:", 1),
+    "CH": (":flag_cn:  China:", 2),
+    "AC": (":flag_ir:  Middle Eastern Coalition:", 3),
+    "EU": (":flag_eu:  European Union:", 4)
 }
-MAP_DATA = {
-    "backstab": ("Backstab", 0),
-    "bridgetoofar": ("Bridge Too Far", 1),
-    "coldfront": ("Cold Front", 2),
-    "dammage": ("Dammage", 3),
-    "deadlypass": ("Deadly Pass", 4),
-    "harboredge": ("Harbor Edge", 5),
-    "honor": ("Honor", 6),
-    "littlebigeye": ("Little Big Eye", 7),
-    "missilecrisis": ("Missile Crisis", 8),
-    "russianborder": ("Russian Border", 9),
-    "specialop": ("Special Op", 10),
-    "theblackgold": ("The Black Gold", 11),
-    "thenest": ("The Nest", 12)
+MAP_STRINGS = (
+    "Backstab",
+    "Bridge Too Far",
+    "Cold Front",
+    "Dammage",
+    "Deadly Pass",
+    "Harbor Edge",
+    "Honor",
+    "Little Big Eye",
+    "Missile Crisis",
+    "Russian Border",
+    "Special Op",
+    "The Black Gold",
+    "The Nest",
+)
+# Rank Data = (Rank Name, Rank Img URL)
+RANK_DATA = (
+    ("Private", RANK_IMAGES_URL.replace("<rank_id>", "01")),
+    ("Private 1st Class", RANK_IMAGES_URL.replace("<rank_id>", "02")),
+    ("Corporal", RANK_IMAGES_URL.replace("<rank_id>", "03")),
+    ("Sergeant", RANK_IMAGES_URL.replace("<rank_id>", "04")),
+    ("Sergeant 1st Class", RANK_IMAGES_URL.replace("<rank_id>", "05")),
+    ("Master Sergeant", RANK_IMAGES_URL.replace("<rank_id>", "06")),
+    ("Sgt. Major", RANK_IMAGES_URL.replace("<rank_id>", "07")),
+    ("Command Sgt. Major", RANK_IMAGES_URL.replace("<rank_id>", "08")),
+    ("Warrant Officer", RANK_IMAGES_URL.replace("<rank_id>", "09")),
+    ("Chief Warrant Officer", RANK_IMAGES_URL.replace("<rank_id>", "10")),
+    ("2nd Lieutenant", RANK_IMAGES_URL.replace("<rank_id>", "11")),
+    ("1st Lieutenant", RANK_IMAGES_URL.replace("<rank_id>", "12")),
+    ("Captain", RANK_IMAGES_URL.replace("<rank_id>", "13")),
+    ("Major", RANK_IMAGES_URL.replace("<rank_id>", "14")),
+    ("Lieutenant Colonel", RANK_IMAGES_URL.replace("<rank_id>", "15")),
+    ("Colonel", RANK_IMAGES_URL.replace("<rank_id>", "16")),
+    ("Brigadier General", RANK_IMAGES_URL.replace("<rank_id>", "17")),
+    ("Major General", RANK_IMAGES_URL.replace("<rank_id>", "18")),
+    ("Lieutenant General", RANK_IMAGES_URL.replace("<rank_id>", "19")),
+    ("5 Star General", RANK_IMAGES_URL.replace("<rank_id>", "20"))
+)
+MEDALS_DATA = {
+    "The_Service_Cross":            (1 << 0, "The Service Cross", "Kill 5 enemies without dying, using kit weapons only."),
+    "The_Bronze_Star":              (1 << 1, "The Bronze Star", "Kill 10 enemies without dying, using land vehicle weapons."),
+    "Air_Force_Cross":              (1 << 2, "Air Force Cross", "Kill 10 enemies without dying, using aerial weapons."),
+    "The_Silver_Star":              (1 << 3, "The Silver Star", "Kill 20 enemies without dying, using vehicle weapons."),
+    "The_Service_Cross_1st_Class":  (1 << 4, "The Service Cross, 1st Class", "Kill 10 enemies without dying, using kit weapons only."),
+    "The_Bronze_Star_1st_Class":    (1 << 5, "The Bronze Star, 1st Class", "Kill 15 enemies without dying, using land vehicle weapons."),
+    "Air_Force_Cross_1st_Class":    (1 << 6, "Air Force Cross, 1st Class", "Kill 15 enemies without dying, using aerial weapons."),
+    "Expert_Killing":               (1 << 7, "Expert Killing", "Kill 4 enemies without dying, using one clip in a assault rifle."),
+    "Expert_Shooting":              (1 << 8, "Expert Shooting", "Kill 4 enemies without dying, using one clip in a sniper rifle."),
+    "Expert_Demolition":            (1 << 9, "Expert Demolition", "Destroy 4 enemy vehicles with C4 without dying."),
+    "Expert_Repair":                (1 << 10, "Expert Repair", "Repair 5 friendly vehicles without dying. A third of their health must be restored."),
+    "Expert_Healer":                (1 << 11, "Expert Healer", "Heal 4 friendly players without dying. A third of their health must be restored."),
+    "Navy_Cross":                   (1 << 12, "Navy Cross", "Kill 30 enemies without dying, using kit weapons only."),
+    "Legion_of_Merit":              (1 << 13, "Legion of Merit", "Kill 15 enemies from a secondary position in a vehicle during one game round."),
+    "Legion_of_Merit_1st_Class":    (1 << 14, "Legion of Merit First Class", "Kill 30 enemies from a secondary position in a vehicle during one game round.")
 }
-# Rank Data = (Min Score, Min PPH): (Rank Name, Rank Img)
-RANK_DATA = {
-    (float('-inf'), float('-inf')): ("Private", "https://raw.githubusercontent.com/lilkingjr1/persman/master/public/ranks/large/pv2.png"),
-    (25, 10): ("Private 1st Class", "https://raw.githubusercontent.com/lilkingjr1/persman/master/public/ranks/large/pfc.png"),
-    (50, 12): ("Corporal", "https://raw.githubusercontent.com/lilkingjr1/persman/master/public/ranks/large/cpl.png"),
-    (100, 15): ("Sergeant", "https://raw.githubusercontent.com/lilkingjr1/persman/master/public/ranks/large/sgt.png"),
-    (150, 18): ("Sergeant 1st Class", "https://raw.githubusercontent.com/lilkingjr1/persman/master/public/ranks/large/sfc.png"),
-    (225, 25): ("Master Sergeant", "https://raw.githubusercontent.com/lilkingjr1/persman/master/public/ranks/large/msg.png"),
-    (360, 28): ("Sgt. Major", "https://raw.githubusercontent.com/lilkingjr1/persman/master/public/ranks/large/sgm.png"),
-    (550, 30): ("Command Sgt. Major", "https://raw.githubusercontent.com/lilkingjr1/persman/master/public/ranks/large/csm.png"),
-    (750, 32): ("Warrant Officer", "https://raw.githubusercontent.com/lilkingjr1/persman/master/public/ranks/large/wo1.png"),
-    (1050, 35): ("Chief Warrant Officer", "https://raw.githubusercontent.com/lilkingjr1/persman/master/public/ranks/large/cw4.png"),
-    (1500, 40): ("2nd Lieutenant", "https://raw.githubusercontent.com/lilkingjr1/persman/master/public/ranks/large/2lt.png"),
-    (2000, 42): ("1st Lieutenant", "https://raw.githubusercontent.com/lilkingjr1/persman/master/public/ranks/large/1lt.png"),
-    (2800, 50): ("Captain", "https://raw.githubusercontent.com/lilkingjr1/persman/master/public/ranks/large/cpt.png"),
-    (4000, 55): ("Major", "https://raw.githubusercontent.com/lilkingjr1/persman/master/public/ranks/large/maj.png"),
-    (5800, 60): ("Lieutenant Colonel", "https://raw.githubusercontent.com/lilkingjr1/persman/master/public/ranks/large/ltc.png"),
-    (8000, 65): ("Colonel", "https://raw.githubusercontent.com/lilkingjr1/persman/master/public/ranks/large/col.png"),
-    (12000, 70): ("Brigadier General", "https://www.military-ranks.org/images/ranks/army/large/brigadier-general.png"),
-    (16000, 80): ("Major General", "https://www.military-ranks.org/images/ranks/army/large/major-general.png"),
-    (22000, 90): ("Lieutenant General", "https://www.military-ranks.org/images/ranks/army/large/lieutenant-general.png"),
-    (32000, 100): ("5 Star General", "https://www.military-ranks.org/images/ranks/army/large/general-of-the-army.png")
+RIBBONS_DATA = {
+    "Games_Played_50":      ("50 Games Played", "Participate in 50 game sessions"),
+    "Games_Played_250":     ("250 Games Played", "Participate in 250 game sessions"),
+    "Games_Played_500":     ("500 Games Played", "Participate in 500 game sessions"),
+    "Major_Victories_5":    ("5 Major Victories", "Complete 5 Major Victories"),
+    "Major_Victories_20":   ("20 Major Victories", "Complete 20 Major Victories"),
+    "Major_Victories_50":   ("50 Major Victories", "Complete 50 Major Victories"),
+    "Top_Player_5":         ("5 Games Top Player", "Finish top player in 5 game rounds"),
+    "Top_Player_20":        ("20 Games Top Player", "Finish top player in 20 game rounds")
 }
 LEADERBOARD_STRINGS = {
-    "score": "Score",
-    "wins": "Wins",
-    "top_player": "MVP",
-    "pph": "Points per Hour",
-    "playtime": "Play Time"
+    "rank":     "Rank",
+    "score":    "Score",
+    "mv":       "Major Victories",
+    "ttb":      "MVP",
+    "pph":      "Points per Hour",
+    "time":     "Play Time",
+    "kills":    "Kills",
+    "vehicles": "Vehicles"
 }
+CLAN_RANK_STRINGS = (
+    "Leader",
+    "Co-Leader",
+    "Member"
+)
+CLAN_REGION_DATA = (
+    ("Americas", CLAN_REGION_URL.replace("<region>", "americas")),
+    ("Europe", CLAN_REGION_URL.replace("<region>", "europe")),
+    ("Asia", CLAN_REGION_URL.replace("<region>", "asia"))
+)
 
 
-def get_rank_data(score: int, pph: int) -> tuple:
-    """Returns rank name and image as a tuple given a score and PPH"""
-    for (min_score, min_pph), rank_data in reversed(RANK_DATA.items()):
-        if score >= min_score and pph >= min_pph:
-            return rank_data
+def get_iso3166_from_region(region_id: int) -> str:
+    if region_id == 1:
+        return "us"
+    elif region_id == 2048:
+        return "cn"
+    else:
+        return "de"
+    
+def get_country_flag_url(region_id: int) -> str:
+    return COUNTRY_FLAGS_URL.replace("<code>", get_iso3166_from_region(region_id))

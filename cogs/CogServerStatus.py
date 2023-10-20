@@ -1,14 +1,13 @@
 """CogServerStatus.py
 
 Handles tasks related to checking server status and info.
-Date: 09/11/2023
+Date: 10/19/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
 
 import discord
 from discord.ext import commands, tasks
-from discord.ext.pages import Paginator, Page
 import common.CommonStrings as CS
 
 
@@ -21,22 +20,22 @@ class CogServerStatus(discord.Cog):
         self.total_online = 0
         self.status_msg = None
         self.server_status = "automatic"
+        self.lfg = []
     
     
-    def get_server_status_embeds(self) -> list[discord.Embed]:
+    def get_server_status_embeds(self, servers: list[dict]) -> list[discord.Embed]:
         """Get Server Statistic Embeds
         
         Returns a list of Discord Embeds that each display each server's current statistics.
-        Excludes Server IDs in the config blacklist.
+        Servers are listed in order of their player count, from highest to lowest.
         """
         # Check for missing query data
-        if self.bot.cur_query_data == None:
+        if servers == None:
             _description = """
-            *The server stats API endpoint is currently down.*
+            *BFMCspy API endpoint is currently down.*
 
-            **BF2:MC servers may still be online.**
-            **We just can't display any stats at this time.**
-
+            **Game servers may still be online.**
+            **We just can't display any status at this time.**
             """
             _embed = discord.Embed(
                     title=":yellow_circle:  Server Stats Unavailable",
@@ -48,9 +47,9 @@ class CogServerStatus(discord.Cog):
             return [_embed]
         
         # Check for no servers online
-        if self.bot.cur_query_data['serversCount'] < 1:
+        if len(servers) < 1:
             _description = f"""
-            There are no BF2:MC servers currently online :cry:
+            There are no game servers currently online :cry:
             Please check <#{self.bot.config['ServerStatus']['AnnouncementTextChannelID']}> for more info.
             """
             _embed = discord.Embed(
@@ -62,18 +61,81 @@ class CogServerStatus(discord.Cog):
             _embed.set_footer(text=f"Data fetched at: {self.bot.last_query.strftime('%I:%M:%S %p UTC')} -- {self.bot.config['API']['HumanURL']}")
             return [_embed]
 
-        # Default - Build server stat embeds
+        # Default - Build server status embeds
         _embeds = []
-        for _s in self.bot.cur_query_data['servers']:
-            # Skip blacklisted Server IDs
-            if _s['id'] in self.bot.config['ServerStatus']['Blacklist']:
-                continue
-            # Skip broken API entry
-            if len(_s['teams']) < 2:
-                continue
+        # Sort by player count and limit to top 3 servers
+        _sorted_servers = sorted(servers, key=lambda x: x['numplayers'], reverse=True)
+        _sorted_servers = _sorted_servers[:3]
+        for _s in _sorted_servers:
             _embeds.append(self.bot.get_server_status_embed(_s))
         
         return _embeds
+    
+    async def do_lfg_check(self, servers: list[dict]):
+        """Do Looking for Game Check
+        
+        Finds most populated public servers for each gamemode and checks LFG users
+        if either server satisfies the user's LFG preferences. This includes gamemode
+        and theoretical minimum users. The theoretical users is the sum of actual players
+        and LFG users with similar preferences.
+        """
+        # Find server with most players for each gamemode
+        _cond_cq_public = lambda s: s['gametype'] == "conquest" and s['c0'] == -1 and s['c1'] == -1
+        _cond_ctf_public = lambda s: s['gametype'] == "capturetheflag" and s['c0'] == -1 and s['c1'] == -1
+        _cq_servers = [_s for _s in servers if _cond_cq_public(_s)]
+        _ctf_servers = [_s for _s in servers if _cond_ctf_public(_s)]
+        _cq_server_most = {"numplayers": -1}
+        _ctf_server_most = {"numplayers": -1}
+        if _cq_servers:
+            _cq_server_most = max(_cq_servers, key=lambda x: x['numplayers'])
+        if _ctf_servers:
+            _ctf_server_most = max(_ctf_servers, key=lambda x: x['numplayers'])
+        
+        # Step through all LFG users
+        _u_notified = []
+        for _u in self.lfg:
+            _cond_lfd_match = lambda p, u: p['uid'] != u['uid'] and p['min_players'] <= u['min_players'] and p['gamemode'] == u['gamemode']
+            _num_theo = len([_p for _p in self.lfg if _cond_lfd_match(_p, _u)])
+            # Determine server with most players based on user preference
+            _server_most = None
+            if _u['gamemode'] == 0:
+                _server_most = _cq_server_most
+            elif _u['gamemode'] == 1:
+                _server_most = _ctf_server_most
+            else:
+                _server_most = max([_cq_server_most, _ctf_server_most], key=lambda x: x['numplayers'])
+            # Send user a notification if necessary
+            if 'hostname' in _server_most and _num_theo + _server_most['numplayers'] >= _u['min_players']:
+                _embed = discord.Embed(
+                    title="Game Found!",
+                    description="Join **now** to play with others that are also looking to play!",
+                    color=discord.Colour.green()
+                )
+                _embed.set_author(
+                    name="BF2:MC Online  |  Looking for Game Notification", 
+                    icon_url=CS.BOT_ICON_URL
+                )
+                _embed.set_thumbnail(url=CS.GM_THUMBNAILS_URL.replace("<gamemode>", _server_most['gametype']))
+                _embed.add_field(name="Server Name:", value=_server_most['hostname'], inline=False)
+                _embed.add_field(name="Current Players:", value=_server_most['numplayers'], inline=False)
+                _embed.add_field(name="Players Looking to Play a Server Like This:", value=_num_theo, inline=False)
+                _embed.set_image(url=CS.MAP_IMAGES_URL.replace("<map_name>", _server_most['map']))
+                _footer = "Other LFG people are counting on you to join this server."
+                _footer += "\nI assume you will, so I have gone ahead and removed you from LFG 👍"
+                _embed.set_footer(text=_footer)
+                self.bot.log(f'[LFG] {_u["name"]} -> "{_server_most["hostname"]}" | Message... ', end='')
+                _user = self.bot.get_user(_u['uid'])
+                if _user:
+                    await _user.send(embed=_embed)
+                    self.bot.log("Done.", time=False)
+                else:
+                    self.bot.log("Failed!", time=False)
+                _u_notified.append(_u)
+        # Remove notified users from LFG list
+        for _u in _u_notified:
+            self.lfg.remove(_u)
+        if len(_u_notified) > 0:
+            self.bot.log(f"[LFG] Matched users removed from LFG ({len(self.lfg)} still LFG)")
     
     async def set_status_channel_name(self, status: str):
         """Set Status Channel Name
@@ -104,7 +166,7 @@ class CogServerStatus(discord.Cog):
         ]
         await self.bot.check_channel_ids_for_cfg_key('ServerStatus', _cfg_sub_keys)
 
-        # Get handle for server stats text channel
+        # Get handle for server status text channel
         _text_channel = self.bot.get_channel(self.bot.config['ServerStatus']['ServerStatusTextChannelID'])
 
         # Get status message (if it exists) from message history (if we haven't already)
@@ -129,27 +191,34 @@ class CogServerStatus(discord.Cog):
     async def StatusLoop(self):
         """Task Loop: Status Loop
         
-        Runs every interval period, references bot's latest query data, 
+        Runs every interval period, queries latest live server data, 
         updates status voice channel, and updates info text channel.
         """
-        ## Calculate total players online (excluding blacklisted servers)
-        _total_online = 0
-        if self.bot.cur_query_data != None:
-            for _s in self.bot.cur_query_data['servers']:
-                if _s['id'] not in self.bot.config['ServerStatus']['Blacklist']:
-                    _total_online += _s['playersCount']
+        ## Query API for servers
+        _servers = await self.bot.query_api("servers/live")
+
+        ## Create live server list (excluding dead/unverified/clan servers) & calculate players online
+        _live_servers = []
+        _total_players = 0
+        if _servers != None:
+            for _server in _servers:
+                if (_server['is_alive'] and _server['verified']
+                        and _server['c0'] < 1 and _server['c1'] < 1):
+                    _live_servers.append(_server)
+                    _total_players += _server['numplayers']
         
         ## Update bot's activity if total players has changed
-        if _total_online != self.total_online:
-            self.total_online = _total_online
-            _activity = discord.Activity(type=discord.ActivityType.watching, name=f"{_total_online} Veterans online")
+        if _total_players != self.total_online:
+            self.total_online = _total_players
+            _activity = discord.Activity(type=discord.ActivityType.watching, name=f"{_total_players} Veterans online")
             await self.bot.change_presence(activity=_activity)
 
         ## Update server status channel name
         if self.server_status == "automatic":
-            if self.bot.cur_query_data == None:
+            if _servers == None:
                 await self.set_status_channel_name("unknown")
-            elif self.bot.cur_query_data['serversCount'] > 0:
+                _live_servers = None
+            elif len(_live_servers) > 0:
                 await self.set_status_channel_name("online")
             else:
                 await self.set_status_channel_name("offline")
@@ -159,21 +228,106 @@ class CogServerStatus(discord.Cog):
             await self.set_status_channel_name("offline")
         elif self.server_status == "unknown":
             await self.set_status_channel_name("unknown")
+            _live_servers = None
 
         ## Update stats channel post
+        _msg = f"## Total Players Online: {self.total_online}"
+        _msg += "\n*Note: Only the top 3 most populated servers are displayed*"
         # Post already exists
         if self.status_msg != None:
             try:
-                await self.status_msg.edit(f"## Total Players Online: {self.total_online}", embeds=self.get_server_status_embeds())
+                await self.status_msg.edit(_msg, embeds=self.get_server_status_embeds(_live_servers))
             except Exception as e:
-                self.bot.log("[WARNING] Unable to edit server stats message. Is the Discord API down?")
+                self.bot.log("[WARNING] Unable to edit server status message. Is the Discord API down?")
                 self.bot.log(f"Exception:\n{e}", time=False)
         # First post needs to be made
         else:
             _text_channel = self.bot.get_channel(self.bot.config['ServerStatus']['ServerStatusTextChannelID'])
-            self.status_msg = await _text_channel.send(f"## Total Players Online: {self.total_online}", embeds=self.get_server_stat_embeds())
+            self.status_msg = await _text_channel.send(_msg, embeds=self.get_server_status_embeds(_live_servers))
+        
+        ## Check LFG users
+        await self.do_lfg_check(_live_servers)
 
 
+    @discord.slash_command(name = "lfg", description="Looking for Game -- Get notified when multiple people are waiting to play")
+    async def lfg(
+        self, 
+        ctx, 
+        gamemode: discord.Option(
+            int, 
+            description="Which gamemode(s) to look for", 
+            choices=[
+                discord.OptionChoice("Conquest", value=0), 
+                discord.OptionChoice("Capture the Flag", value=1),
+                discord.OptionChoice("Both (Default)", value=2)
+            ],
+            default=2
+        ),
+        min_players: discord.Option(
+            int, 
+            description="Minimum players (playing and/or looking for game)", 
+            min_value=1, 
+            max_value=27, 
+            default=3
+        ),
+        remove: discord.Option(
+            bool, 
+            description="Remove yourself from looking from game", 
+            default=False
+        )
+    ):
+        """Slash Command: /lfg
+        
+        Looking for Game (LFG)
+        Caller specifies what gamemode and minimum players they want to play with
+        and get's added to the LFG list to be notified later when those requirements are met.
+        """
+        _lfg_user = None
+
+        # Check if they are already in the LFG list
+        for _d in self.lfg:
+            if _d['uid'] == ctx.author.id:
+                # Remove them if specified
+                if remove:
+                    self.lfg.remove(_d)
+                    self.bot.log(f"[LFG] Removed user {ctx.author.name} from LFG ({len(self.lfg)} total LFG).")
+                    _msg = "Successfully removed you from the Looking for Game system."
+                    _msg += "\n\nYou will no longer get a notification (unless you sign up again)."
+                    return await ctx.respond(_msg, ephemeral=True)
+                # Get pointer to existing user to update
+                _lfg_user = _d
+                break
+        # If specified to remove, but couldn't find, display warning message
+        if remove and not _lfg_user:
+            return await ctx.respond(":warning: You are not currently looking for a game.", ephemeral=True)
+        
+        # Update preferences in LFG list
+        if _lfg_user:
+            if _lfg_user['gamemode'] != gamemode:
+                _lfg_user['gamemode'] = gamemode
+            if _lfg_user['min_players'] != min_players:
+                _lfg_user['min_players'] = min_players
+            _msg = ":white_check_mark: You have successfully updated your LFG preferences!"
+            _msg += "\n\nYou will now get a notification when your new preferences are met."
+            return await ctx.respond(_msg, ephemeral=True)
+        
+        # Add user to LFG list
+        _lfg_user = {
+            "uid": ctx.author.id,
+            "name": ctx.author.name,
+            "gamemode": gamemode,
+            "min_players": min_players
+        }
+        self.lfg.append(_lfg_user)
+        self.bot.log(f"[LFG] Added user {ctx.author.name} to LFG ({len(self.lfg)} total LFG).")
+        _msg = ":white_check_mark: You have successfully signed up for LFG!"
+        _msg += "\n\nYou will get a notification from me (via private message) when a server:"
+        _msg += "\n- Matches the gamemode you are looking for"
+        _msg += "\n- Meets your minimum number of people playing and/or waiting for that gamemode"
+        _msg += "\n\n*(If you wish to remove yourself from LFG, use*  `/lfg remove True`  *)*"
+        return await ctx.respond(_msg, ephemeral=True)
+
+    
     """Slash Command Group: /server
     
     A group of commands related to checking server status and info.
@@ -181,16 +335,23 @@ class CogServerStatus(discord.Cog):
     server = discord.SlashCommandGroup("server", "Commands related to checking official BF2:MC server status and info")
     
     @server.command(name = "count", description="Reports number of live BF2:MC servers")
+    @commands.cooldown(1, 30, commands.BucketType.member)
     async def count(self, ctx):
         """Slash Command: /server count
         
-        Reports number of live BF2:MC servers (since last status check).
+        Reports number of live BF2:MC servers.
         Useful as backup if status channel has hit it's rate limit.
         """
-        if self.bot.cur_query_data != None:
-            await ctx.respond(f"Number of live BF2:MC servers: {self.bot.cur_query_data['serversCount']}", ephemeral=True)
-        else:
-            raise commands.CommandError("There was an error retrieving this data. The statistics API may be down at the moment.")
+        # Query API for servers
+        _servers = await self.bot.cmd_query_api("servers/live")
+        
+        # Count live and verified servers
+        _total_servers = 0
+        for _server in _servers:
+            if _server['is_alive'] and _server['verified']:
+                _total_servers += 1
+        
+        await ctx.respond(f"Number of live BF2:MC servers: {_total_servers}", ephemeral=True)
     
     @server.command(name = "setstatus", description="Manually set the global server status, or set it to automatically update. Only admins can do this.")
     async def setstatus(

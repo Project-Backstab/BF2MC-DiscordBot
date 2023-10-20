@@ -1,7 +1,7 @@
 """main.py
 
 Main file to start Backstab
-Date: 09/17/2023
+Date: 10/19/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -19,11 +19,13 @@ from src import BackstabBot
 import common.CommonStrings as CS
 
 def main():
-    VERSION = "3.2.3"
+    VERSION = "4.0.0"
     AUTHORS = "Red-Thirten"
     COGS_LIST = [
+        "CogServerStatus",
+        "CogServerStats",
         "CogPlayerStats",
-        "CogServerStatus"
+        "CogClanStats"
     ]
 
     print(
@@ -155,7 +157,7 @@ def main():
         )
         _embed.set_author(
             name="BackStab Bot", 
-            icon_url="https://raw.githubusercontent.com/lilkingjr1/backstab-discord-bot/main/assets/icon.png"
+            icon_url=CS.BOT_ICON_URL
         )
         _embed.set_thumbnail(url="https://cdn.discordapp.com/icons/502923049541304320/4d8d584de5d9baec281d4861c6b11781.webp?size=4096")
         # Construct string of bot commands for display
