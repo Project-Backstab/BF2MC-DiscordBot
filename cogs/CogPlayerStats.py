@@ -1,7 +1,7 @@
 """CogPlayerStats.py
 
 Handles tasks related to checking player stats and info.
-Date: 10/18/2023
+Date: 10/20/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -776,6 +776,24 @@ class CogPlayerStats(discord.Cog):
                 embed=self.embeds[select.values[0]], 
                 view=self
             )
+    
+    @player.command(name = "self", description="Displays BF2:MC Online stats for a nickname you own")
+    async def self(
+        self,
+        ctx,
+        nickname: discord.Option(
+            str, 
+            description="Nickname to display stats for", 
+            autocomplete=discord.utils.basic_autocomplete(get_owned_uniquenicks), 
+            max_length=255, 
+            required=True
+        )
+    ):
+        """Slash Command: /player self
+        
+        Alias for `/player stats`, but autocomplete only shows owned nicknames.
+        """
+        return await self.stats(ctx, nickname)
 
     @player.command(name = "leaderboard", description="See a top 50 leaderboard for a particular stat in BF2:MC Online")
     @commands.cooldown(8, 300, commands.BucketType.channel)
