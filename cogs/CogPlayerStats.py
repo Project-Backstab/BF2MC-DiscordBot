@@ -330,7 +330,7 @@ class CogPlayerStats(discord.Cog):
             ("profileid", "profileid"),
             ("uniquenick=%s", [nickname])
         )
-        if _player_data == None:
+        if _player_data == None or _player_data[0]['score'] == None:
             return await ctx.respond(
                 f':warning: An account with the nickname of "{_escaped_nickname}" could not be found.', 
                 #ephemeral=True
