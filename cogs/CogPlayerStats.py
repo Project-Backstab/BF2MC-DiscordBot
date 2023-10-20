@@ -736,11 +736,11 @@ class CogPlayerStats(discord.Cog):
         )
         _e_kits.set_thumbnail(url=_rank_data[1])
         _e_kits.add_field(name="Favorite Kit (Most Spawns):", value=_fav_kit, inline=False)
-        _e_kits.add_field(name="Assult Kills:", value=_player_data['lavd'], inline=True)
-        _e_kits.add_field(name="Sniper Kills:", value=_player_data['mavd'], inline=True)
-        _e_kits.add_field(name="Special Op. Kills:", value=_player_data['havd'], inline=True)
-        _e_kits.add_field(name="Combat Engineer Kills:", value=_player_data['hed'], inline=True)
-        _e_kits.add_field(name="Support Kills:", value=_player_data['bod'], inline=True)
+        _e_kits.add_field(name="Assult Kills:", value=_player_data['k1'], inline=True)
+        _e_kits.add_field(name="Sniper Kills:", value=_player_data['k2'], inline=True)
+        _e_kits.add_field(name="Special Op. Kills:", value=_player_data['k3'], inline=True)
+        _e_kits.add_field(name="Combat Engineer Kills:", value=_player_data['k4'], inline=True)
+        _e_kits.add_field(name="Support Kills:", value=_player_data['k5'], inline=True)
         _e_kits.set_footer(text="BFMCspy Official Stats")
         _embeds[_title] = _e_kits
         _select_options.append(
