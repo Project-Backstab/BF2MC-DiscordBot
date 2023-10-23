@@ -1,7 +1,7 @@
 """main.py
 
 Main file to start Backstab
-Date: 10/22/2023
+Date: 10/23/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -19,7 +19,7 @@ from src import BackstabBot
 import common.CommonStrings as CS
 
 def main():
-    VERSION = "4.1.0"
+    VERSION = "4.1.1"
     AUTHORS = "Red-Thirten"
     COGS_LIST = [
         "CogServerStatus",
@@ -220,6 +220,7 @@ def main():
         
         Makes the bot send a Direct Message to a member. Only admins can do this.
         """
+        await ctx.defer(ephemeral=True)
         # Determine color
         _embed_color = discord.Colour.blurple()
         if color == "Green": _embed_color = discord.Colour.green()
@@ -236,7 +237,7 @@ def main():
             icon_url="https://raw.githubusercontent.com/Project-Backstab/BF2MC-DiscordBot/main/assets/emojis/patches/BFMCspy_Launch.png"
         )
         _footer = "Do not reply to this message; it will not be read."
-        _footer += "\nPlease contact an admin directly if you wish to reply."
+        _footer += "\nPlease contact the admin team via Mod Mail if you wish to reply."
         _embed.set_footer(text=_footer)
         # Send message
         await member.send(embed=_embed)
