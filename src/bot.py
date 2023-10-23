@@ -1,7 +1,7 @@
 """bot.py
 
 A subclass of `discord.Bot` that adds ease-of-use instance variables and functions (e.g. database object).
-Date: 10/19/2023
+Date: 10/22/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -215,11 +215,14 @@ class BackstabBot(discord.Bot):
         # Get team players and sort by score
         _team1 = []
         _team2 = []
+        _no_team = []
         for _p in server_data['players']:
             if _p['team'] == 0:
                 _team1.append(_p)
-            else:
+            elif _p['team'] == 1:
                 _team2.append(_p)
+            else:
+                _no_team.append(_p)
         _team1 = sorted(_team1, key=lambda x: x['score'], reverse=True)
         _team2 = sorted(_team2, key=lambda x: x['score'], reverse=True)
         
@@ -243,7 +246,7 @@ class BackstabBot(discord.Bot):
             value=self.get_team_score_str(server_data['gametype'], server_data['score0']), 
             inline=False
         )
-        _embed.add_field(name="Player:", value=self.get_player_attr_list_str(_team1, 'name'), inline=True)
+        _embed.add_field(name="Players:", value=self.get_player_attr_list_str(_team1, 'name'), inline=True)
         _embed.add_field(name="Score:", value=self.get_player_attr_list_str(_team1, 'score'), inline=True)
         _embed.add_field(name="Deaths:", value=self.get_player_attr_list_str(_team1, 'deaths'), inline=True)
         _embed.add_field(
@@ -251,9 +254,16 @@ class BackstabBot(discord.Bot):
             value=self.get_team_score_str(server_data['gametype'], server_data['score1']), 
             inline=False
         )
-        _embed.add_field(name="Player:", value=self.get_player_attr_list_str(_team2, 'name'), inline=True)
+        _embed.add_field(name="Players:", value=self.get_player_attr_list_str(_team2, 'name'), inline=True)
         _embed.add_field(name="Score:", value=self.get_player_attr_list_str(_team2, 'score'), inline=True)
         _embed.add_field(name="Deaths:", value=self.get_player_attr_list_str(_team2, 'deaths'), inline=True)
+        if len(_no_team) > 0:
+            _embed.add_field(
+                name="👥︎  No Team:",  
+                value="", 
+                inline=False
+            )
+            _embed.add_field(name="Players:", value=self.get_player_attr_list_str(_no_team, 'name'), inline=True)
         _embed.set_image(url=CS.MAP_IMAGES_URL.replace("<map_name>", server_data['map']))
         _embed.set_footer(text=f"Data fetched at: {self.last_query.strftime('%I:%M:%S %p UTC')} -- {self.config['API']['HumanURL']}")
 
