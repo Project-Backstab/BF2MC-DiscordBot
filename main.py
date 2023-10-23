@@ -1,7 +1,7 @@
 """main.py
 
 Main file to start Backstab
-Date: 10/20/2023
+Date: 10/22/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -19,7 +19,7 @@ from src import BackstabBot
 import common.CommonStrings as CS
 
 def main():
-    VERSION = "4.0.4"
+    VERSION = "4.1.0"
     AUTHORS = "Red-Thirten"
     COGS_LIST = [
         "CogServerStatus",
@@ -184,6 +184,64 @@ def main():
         await ctx.send(text)
         await ctx.respond("...", ephemeral=True, delete_after=0)
         bot.log(f"{ctx.author.name} made bot say \"{text}\"")
+        
+    @bot.slash_command(guild_ids=[bot.config['GuildID']], name = "dm", description="Makes the bot send a Direct Message to a member. Only admins can do this.")
+    @discord.default_permissions(manage_channels=True) # Only members with Manage Channels permission can use this command.
+    async def dm(
+        ctx, 
+        member: discord.Option(
+            discord.Member, 
+            description="Discord member to send DM to",
+            required=True
+        ), 
+        title: discord.Option(
+            str, 
+            description="Title of message",
+            required=True
+        ), 
+        color: discord.Option(
+            str, 
+            description="Accent color of message",
+            choices=[
+                "Blurple",
+                "Green",
+                "Yellow",
+                "Red"
+            ],
+            required=True
+        ), 
+        message: discord.Option(
+            str, 
+            description="Message text",
+            required=True
+        )
+    ):
+        """Slash Command: /dm
+        
+        Makes the bot send a Direct Message to a member. Only admins can do this.
+        """
+        # Determine color
+        _embed_color = discord.Colour.blurple()
+        if color == "Green": _embed_color = discord.Colour.green()
+        elif color == "Yellow": _embed_color = discord.Colour.yellow()
+        elif color == "Red": _embed_color = discord.Colour.red()
+        # Build embed for message
+        _embed = discord.Embed(
+            title=title,
+            description=message,
+            color=_embed_color
+        )
+        _embed.set_author(
+            name="BFMCspy Admin Team", 
+            icon_url="https://raw.githubusercontent.com/Project-Backstab/BF2MC-DiscordBot/main/assets/emojis/patches/BFMCspy_Launch.png"
+        )
+        _footer = "Do not reply to this message; it will not be read."
+        _footer += "\nPlease contact an admin directly if you wish to reply."
+        _embed.set_footer(text=_footer)
+        # Send message
+        await member.send(embed=_embed)
+        await ctx.respond("Message sent.", ephemeral=True)
+        bot.log(f'{ctx.author.name} made bot send the following message to {member.name}:\n\tTitle: {title}\n\tMessage: "{message}"')
         
     @bot.slash_command(guild_ids=[bot.config['GuildID']], name = "reloadconfig", description="Reloads the bot's config file. Only admins can do this.")
     @discord.default_permissions(manage_channels=True) # Only members with Manage Channels permission can use this command.
