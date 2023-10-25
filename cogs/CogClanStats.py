@@ -1,7 +1,7 @@
 """CogClanStats.py
 
 Handles tasks related to checking clan stats and info.
-Date: 10/19/2023
+Date: 10/25/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -93,10 +93,10 @@ class CogClanStats(discord.Cog):
         ## Get clan members
         _clan_members = self.bot.db_backend.leftJoin(
             ("ClanRanks", "Players"),
-            (["rank"], ["uniquenick"]),
+            (["`rank`"], ["uniquenick"]),
             ("profileid", "profileid"),
             ("clanid=%s", [_clan_data['clanid']]),
-            ["rank", "ASC"]
+            ["`rank`", "ASC"]
         )
         if _clan_members == None:
             return await ctx.respond(
@@ -107,7 +107,7 @@ class CogClanStats(discord.Cog):
         ## Get clan rank
         _clan_rank = self.bot.db_backend.getOne(
             "Leaderboard_clan",
-            ["rank"], 
+            ["`rank`"], 
             ("clanid=%s", [_clan_data['clanid']])
         )
         if _clan_rank: 
@@ -248,7 +248,7 @@ class CogClanStats(discord.Cog):
             ["name", "tag", stat], 
             None, 
             [stat, "DESC"], # Order highest first
-            [0, 50] # Limit to top 50 clans
+            [50] # Limit to top 50 clans
         )
         _title = f":first_place:  BF2:MC Online | Top Clan {CS.LEADERBOARD_STRINGS[stat]} Leaderboard  :first_place:"
         if _dbEntries:

@@ -1,7 +1,7 @@
 """CommonStrings.py
 
 Collection of commonly used public static final strings and related functions.
-Date: 10/22/2023
+Date: 10/25/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -95,7 +95,7 @@ RIBBONS_DATA = {
     "Top_Player_20":        ("20 Games Top Player", "Finish top player in 20 game rounds")
 }
 LEADERBOARD_STRINGS = {
-    "rank":     "Rank",
+    "`rank`":   "Overall",
     "score":    "Score",
     "mv":       "Major Victories",
     "ttb":      "MVP",

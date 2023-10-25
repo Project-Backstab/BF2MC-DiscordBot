@@ -1,7 +1,7 @@
 """CogPlayerStats.py
 
 Handles tasks related to checking player stats and info.
-Date: 10/20/2023
+Date: 10/25/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -805,7 +805,7 @@ class CogPlayerStats(discord.Cog):
             name="leaderboard", 
             description="Leaderboard to display", 
             choices=[
-                discord.OptionChoice(CS.LEADERBOARD_STRINGS['rank'], value='rank'),
+                discord.OptionChoice(CS.LEADERBOARD_STRINGS['`rank`'], value='`rank`'),
                 discord.OptionChoice(CS.LEADERBOARD_STRINGS['score'], value='score'),
                 discord.OptionChoice(CS.LEADERBOARD_STRINGS['mv'], value='mv'),
                 discord.OptionChoice(CS.LEADERBOARD_STRINGS['ttb'], value='ttb'),
@@ -826,9 +826,9 @@ class CogPlayerStats(discord.Cog):
         _db_table = "PlayerStats"
         _db_columns = [stat]
         _order = "DESC"
-        if stat == 'rank': # Special query for overall rank
+        if stat == '`rank`': # Special query for overall rank
             _db_table = "Leaderboard_rank"
-            _db_columns.append("ran")
+            _db_columns = ["ran"]
             _order = "ASC"
         _dbEntries = self.bot.db_backend.leftJoin(
             (_db_table, "Players"), 
@@ -839,7 +839,7 @@ class CogPlayerStats(discord.Cog):
             ("profileid", "profileid"), 
             None, 
             [stat, _order], # Order highest first
-            [0, 50] # Limit to top 50 players
+            [50] # Limit to top 50 players
         )
         _title = f":first_place:  BF2:MC Online | Top Player {CS.LEADERBOARD_STRINGS[stat]} Leaderboard  :first_place:"
         if _dbEntries:
@@ -855,8 +855,8 @@ class CogPlayerStats(discord.Cog):
                 for _e in _page:
                     _rank_str = f"#{_rank}"
                     _nicknames += f"{_rank_str.ljust(3)} | {_e['uniquenick']}\n"
-                    if stat == 'rank':
-                        _stats += f"{CS.RANK_DATA[_e['ran']-1][0].rjust(20)}\n"
+                    if stat == '`rank`':
+                        _stats += f"{CS.RANK_DATA[_e['ran']-1][0].rjust(21)}\n"
                     elif stat == 'score':
                         _stats += f"{str(_e[stat]).rjust(6)} pts.\n"
                     elif stat == 'mv':
