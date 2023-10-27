@@ -1,7 +1,7 @@
 """main.py
 
 Main file to start Backstab
-Date: 10/25/2023
+Date: 10/27/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -19,7 +19,7 @@ from src import BackstabBot
 import common.CommonStrings as CS
 
 def main():
-    VERSION = "4.1.2"
+    VERSION = "4.1.3"
     AUTHORS = "Red-Thirten"
     COGS_LIST = [
         "CogServerStatus",
@@ -68,7 +68,7 @@ def main():
         # Try to translate message and return None if error
         try:
             _translated_msg = GoogleTranslator(source=from_lang, target=to_lang).translate(msg.content)
-        except:
+        except Exception:
             bot.log("[Translate] Could not translate message:")
             bot.log(f'\t{msg.author.display_name}: [{from_lang} -> en] "{msg.content}"', time=False)
             return None
@@ -119,7 +119,7 @@ def main():
         # Try to detect message language and return if error
         try:
             _from_lang = LangDetect(message.content)
-        except:
+        except Exception:
             bot.log("[Translate] Could not detect language of message:")
             bot.log(f'\t{message.author.display_name}: "{message.content}"', time=False)
             return

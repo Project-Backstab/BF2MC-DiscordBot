@@ -1,7 +1,7 @@
 """CogPlayerStats.py
 
 Handles tasks related to checking player stats and info.
-Date: 10/25/2023
+Date: 10/27/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -444,7 +444,11 @@ class CogPlayerStats(discord.Cog):
         _patches_emoji = ""
         if _patches_data:
             for _p in _patches_data:
-                _patches_emoji += self.bot.config['Patches'][str(_p['patchid'])][2]
+                _patchid_str = str(_p['patchid'])
+                try:
+                    _patches_emoji += self.bot.config['Patches'][_patchid_str][2]
+                except Exception:
+                    self.bot.log(f"[PlayerStats] WARNING: PatchID {_patchid_str} not found in config! Skipping.")
         if _patches_emoji == "": _patches_emoji = None
         # Calculate K/D ratio
         _kd_ratio = _player_data['kills'] / max(_player_data['deaths'], 1)
@@ -676,11 +680,14 @@ class CogPlayerStats(discord.Cog):
             )
             _e_patches.set_thumbnail(url=_rank_data[1])
             for _p in _patches_data:
-                _e_patches.add_field(
-                    name=f"{self.bot.config['Patches'][str(_p['patchid'])][2]} {self.bot.config['Patches'][str(_p['patchid'])][0]}:", 
-                    value=f"*Earned: {_p['date_earned'].strftime('%m/%d/%y')}*\n{self.bot.config['Patches'][str(_p['patchid'])][1]}", 
-                    inline=False
-                )
+                try:
+                    _e_patches.add_field(
+                        name=f"{self.bot.config['Patches'][str(_p['patchid'])][2]} {self.bot.config['Patches'][str(_p['patchid'])][0]}:", 
+                        value=f"*Earned: {_p['date_earned'].strftime('%m/%d/%y')}*\n{self.bot.config['Patches'][str(_p['patchid'])][1]}", 
+                        inline=False
+                    )
+                except Exception:
+                    pass
             _e_patches.set_footer(text="BFMCspy Official Stats")
             _embeds[_title] = _e_patches
             _emoji = self.bot.config['Patches']['1'][2]

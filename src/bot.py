@@ -1,7 +1,7 @@
 """bot.py
 
 A subclass of `discord.Bot` that adds ease-of-use instance variables and functions (e.g. database object).
-Date: 10/22/2023
+Date: 10/27/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -279,7 +279,7 @@ class BackstabBot(discord.Bot):
         # DEBUGGING
         try:
             _DEBUG = self.config[url_subfolder]
-        except:
+        except Exception:
             _DEBUG = None
 
         # Build URL string
