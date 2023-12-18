@@ -1,5 +1,6 @@
 # Local config file
 config.cfg
+config-prod.cfg
 
 # Local dev files
 TODO.txt
