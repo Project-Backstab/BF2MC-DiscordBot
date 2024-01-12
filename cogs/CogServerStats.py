@@ -1,7 +1,7 @@
 """CogServerStats.py
 
 Handles tasks related to checking server stats and info.
-Date: 10/16/2023
+Date: 01/12/2024
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -34,7 +34,7 @@ class CogServerStats(discord.Cog):
     mostplayed = discord.SlashCommandGroup("mostplayed", 'Commands related to checking "most played" related stats')
 
     @mostplayed.command(name = "map", description="See which maps have been played the most for a given gamemode")
-    @commands.cooldown(1, 180, commands.BucketType.channel)
+    @commands.cooldown(2, 180, commands.BucketType.channel)
     async def map(
         self, 
         ctx, 
@@ -48,6 +48,7 @@ class CogServerStats(discord.Cog):
         """Slash Command: /mostplayed map
         
         Displays which maps have been played the most for a given gamemode.
+        Excludes games recorded in the DB with less than the configured `MatchMinPlayers`.
         """
         # Determine gametype ID
         _gt_id = 1
@@ -58,7 +59,10 @@ class CogServerStats(discord.Cog):
         _games = self.bot.db_backend.getAll(
             "GameStats", 
             ["mapid"], 
-            ("gametype = %s", [_gt_id])
+            (
+                "gametype = %s and numplayers >= %s",
+                [_gt_id, self.bot.config['PlayerStats']['MatchMinPlayers']]
+            )
         )
         if _games == None:
             return await ctx.respond(f":warning: No data for {gamemode} yet. Please try again later.", ephemeral=True)
@@ -114,14 +118,14 @@ class CogServerStats(discord.Cog):
         
         _embed = discord.Embed(
             title=f"👥︎  Total Player Count",
-            description=f"There are currently **{_dbResult[0][0]}** uniquely registered players",
+            description=f"There are currently **{_dbResult[0][0]:,}** uniquely registered players",
             color=discord.Colour.dark_blue()
         )
         _embed.set_footer(text="BFMCspy Official Stats")
         await ctx.respond(embed=_embed)
     
     @total.command(name = "games", description="Displays the total number of games played across all servers")
-    @commands.cooldown(1, 60, commands.BucketType.channel)
+    @commands.cooldown(3, 180, commands.BucketType.channel)
     async def games(
         self, 
         ctx, 
@@ -142,17 +146,76 @@ class CogServerStats(discord.Cog):
         Displays the total number of games played across all servers.
         Option option to restrict to just public or clan games.
         """
-        _dbResult = self.bot.db_backend.call(
-            "queryGameCount",
-            [clan_games_filter]
+        if clan_games_filter == 0:
+            _filter = "Public"
+            _db_condition = "clanid_t0 = 0 and clanid_t1 = 0 and numplayers >= %s"
+        elif clan_games_filter == 1:
+            _filter = "Clan"
+            _db_condition = "clanid_t0 <> 0 and clanid_t1 <> 0 and numplayers >= %s"
+        else:
+            _filter = "Public & Clan"
+            _db_condition = "numplayers >= %s"
+
+        _dbResults = self.bot.db_backend.getAll(
+            "GameStats", 
+            ["id"], 
+            (
+                _db_condition, 
+                [self.bot.config['PlayerStats']['MatchMinPlayers']]
+            )
         )
         
-        if clan_games_filter == 0:      _filter = "Public"
-        elif clan_games_filter == 1:    _filter = "Clan"
-        else:                           _filter = "Public & Clan"
         _embed = discord.Embed(
             title=f"🎮  Total Games ({_filter})",
-            description=f"**{_dbResult[0][0]}** unique games have been played across all servers since {STATS_EPOCH_DATE_STR}",
+            description=f"**{len(_dbResults):,}** unique games have been played across all servers since {STATS_EPOCH_DATE_STR}",
+            color=discord.Colour.dark_blue()
+        )
+        _embed.set_footer(text="BFMCspy Official Stats")
+        await ctx.respond(embed=_embed)
+    
+    @total.command(name = "kills", description="Displays the total number of kills across all players")
+    @commands.cooldown(1, 180, commands.BucketType.channel)
+    async def kills(self, ctx):
+        """Slash Command: /total kills
+        
+        Displays the total number of kills across all players.
+        """
+        _dbResults = self.bot.db_backend.getAll(
+            "PlayerStats", 
+            ["kills"]
+        )
+        
+        _total_kills = 0
+        for _p in _dbResults:
+            _total_kills += _p['kills']
+
+        _embed = discord.Embed(
+            title=f"💀  Total Player Kills",
+            description=f"All players have fragged a total of **{_total_kills:,}** enemies since {STATS_EPOCH_DATE_STR}",
+            color=discord.Colour.dark_blue()
+        )
+        _embed.set_footer(text="BFMCspy Official Stats")
+        await ctx.respond(embed=_embed)
+    
+    @total.command(name = "vehicles", description="Displays the total number of vehicles destroyed across all players")
+    @commands.cooldown(1, 180, commands.BucketType.channel)
+    async def vehicles(self, ctx):
+        """Slash Command: /total vehicles
+        
+        Displays the total number of vehicles destroyed across all players.
+        """
+        _dbResults = self.bot.db_backend.getAll(
+            "PlayerStats", 
+            ["vehicles"]
+        )
+        
+        _total_vehicles = 0
+        for _p in _dbResults:
+            _total_vehicles += _p['vehicles']
+
+        _embed = discord.Embed(
+            title=f"🚙  Total Vehicles Destroyed",
+            description=f"All players have destroyed a total of **{_total_vehicles:,}** vehicles since {STATS_EPOCH_DATE_STR}",
             color=discord.Colour.dark_blue()
         )
         _embed.set_footer(text="BFMCspy Official Stats")
