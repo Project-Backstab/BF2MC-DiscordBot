@@ -1,7 +1,7 @@
 """CommonStrings.py
 
 Collection of commonly used public static final strings and related functions.
-Date: 10/25/2023
+Date: 01/12/2024
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -31,14 +31,14 @@ TEAM_STRINGS = {
 }
 MAP_STRINGS = (
     "Backstab",
-    "Bridge Too Far",
-    "Cold Front",
-    "Dammage",
     "Deadly Pass",
+    "Bridge Too Far",
+    "Dammage",
     "Harbor Edge",
     "Honor",
     "Little Big Eye",
     "Missile Crisis",
+    "Cold Front",
     "Russian Border",
     "Special Op",
     "The Black Gold",
