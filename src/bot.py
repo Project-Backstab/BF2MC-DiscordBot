@@ -236,9 +236,11 @@ class BackstabBot(discord.Bot):
                 ["name"], 
                 ("clanid = %s or clanid = %s", [server_data['c0'], server_data['c1']])
             )
-            _title = f"{_clanNames[0]['name']} vs. {_clanNames[1]['name']}"
-            _description = "*Clan Game*"
-            _color = discord.Colour.orange()
+            # Check if valid clan IDs were found
+            if len(_clanNames) == 2:
+                _title = f"{_clanNames[0]['name']} vs. {_clanNames[1]['name']}"
+                _description = f"*Private Clan Game*\n({server_data['hostname']})"
+                _color = discord.Colour.orange()
         
         # Setup Discord embed
         _embed = discord.Embed(
