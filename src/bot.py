@@ -1,7 +1,7 @@
 """bot.py
 
 A subclass of `discord.Bot` that adds ease-of-use instance variables and functions (e.g. database object).
-Date: 01/21/2024
+Date: 01/30/2024
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -230,17 +230,12 @@ class BackstabBot(discord.Bot):
         _title = server_data['hostname']
 
         # Check if clan game
-        if server_data['c0'] > 0 or server_data['c1'] > 0:
-            _clanNames = self.db_backend.getAll(
-                "Clans", 
-                ["name"], 
-                ("clanid = %s or clanid = %s", [server_data['c0'], server_data['c1']])
-            )
-            # Check if valid clan IDs were found
-            if len(_clanNames) == 2:
-                _title = f"{_clanNames[0]['name']} vs. {_clanNames[1]['name']}"
-                _description = f"*Private Clan Game*\n({server_data['hostname']})"
-                _color = discord.Colour.orange()
+        if server_data['n0'] and server_data['n1']:
+            _team1_name = self.escape_discord_formatting(server_data['n0'])
+            _team2_name = self.escape_discord_formatting(server_data['n1'])
+            _title = f"{_team1_name}  *vs.*  {_team2_name}"
+            _description = f"*Private Clan Game*\n({server_data['hostname']})"
+            _color = discord.Colour.orange()
         
         # Setup Discord embed
         _embed = discord.Embed(

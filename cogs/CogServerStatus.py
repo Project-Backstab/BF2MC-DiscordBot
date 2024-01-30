@@ -1,7 +1,7 @@
 """CogServerStatus.py
 
 Handles tasks related to checking server status and info.
-Date: 01/21/2024
+Date: 01/30/2024
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -80,8 +80,8 @@ class CogServerStatus(discord.Cog):
         and LFG users with similar preferences.
         """
         # Find server with most players for each gamemode
-        _cond_cq_public = lambda s: s['gametype'] == "conquest" and s['c0'] == -1 and s['c1'] == -1
-        _cond_ctf_public = lambda s: s['gametype'] == "capturetheflag" and s['c0'] == -1 and s['c1'] == -1
+        _cond_cq_public = lambda s: s['gametype'] == "conquest" and not s['n0'] and not s['n1'] and s['numplayers'] < s['maxplayers']
+        _cond_ctf_public = lambda s: s['gametype'] == "capturetheflag" and not s['n0'] and not s['n1'] and s['numplayers'] < s['maxplayers']
         _cq_servers = [_s for _s in servers if _cond_cq_public(_s)]
         _ctf_servers = [_s for _s in servers if _cond_ctf_public(_s)]
         _cq_server_most = {"numplayers": -1}

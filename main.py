@@ -1,7 +1,7 @@
 """main.py
 
 Main file to start Backstab
-Date: 01/21/2024
+Date: 01/30/2024
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -19,7 +19,7 @@ from src import BackstabBot
 import common.CommonStrings as CS
 
 def main():
-    VERSION = "4.2.1"
+    VERSION = "4.2.2"
     AUTHORS = "Red-Thirten"
     COGS_LIST = [
         "CogServerStatus",
@@ -30,7 +30,7 @@ def main():
 
     print(
         f"Backstab Discord Bot - v{VERSION}\n"
-        "Copyright (c) 2023 David Wolfe (Red-Thirten)"
+        "Copyright (c) 2024 David Wolfe (Red-Thirten)"
     )
 
     """Discord Bot -- Main
