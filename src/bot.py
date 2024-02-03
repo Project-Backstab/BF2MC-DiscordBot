@@ -1,7 +1,7 @@
 """bot.py
 
 A subclass of `discord.Bot` that adds ease-of-use instance variables and functions (e.g. database object).
-Date: 01/30/2024
+Date: 02/03/2024
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -171,9 +171,12 @@ class BackstabBot(discord.Bot):
         Runs every interval period and sends a heartbeat to Uptime Kuma
         by making a GET request to the configured Push URL.
         """
-        requests.get(self.config['UptimeKuma']['PushURL'])
-        if self.config['UptimeKuma']['LogPush']:
-            self.log("[General] Uptime Kuma heartbeat pushed.")
+        try:
+            requests.get(self.config['UptimeKuma']['PushURL'], timeout=5)
+            if self.config['UptimeKuma']['LogPush']:
+                self.log("[General] Uptime Kuma heartbeat pushed.")
+        except requests.exceptions.Timeout:
+            self.log("[WARNING] Uptime Kuma heartbeat FAILED!\n\t(Push URL did not respond within 5 seconds)")
     
     async def on_application_command_error(self, ctx, error):
         """Event: On Command Error
