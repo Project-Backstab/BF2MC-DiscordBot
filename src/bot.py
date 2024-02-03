@@ -12,7 +12,7 @@ import requests
 from datetime import datetime
 
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 from simplemysql import SimpleMysql
 import inflect
 import common.CommonStrings as CS
@@ -153,8 +153,27 @@ class BackstabBot(discord.Bot):
         if _guild == None:
             self.log(f"ERROR: [Config] Could not find valid guild with ID: {self.config['GuildID']}", time=False)
             await self.close()
+
+        # Start UptimeKuma Loop (if configured)
+        if self.config['UptimeKuma']['Enabled'] and not self.UptimeKumaLoop.is_running():
+            _heartbeatSec = self.config['UptimeKuma']['HeartbeatSec']
+            self.UptimeKumaLoop.change_interval(seconds=_heartbeatSec)
+            self.UptimeKumaLoop.start()
+            self.log(f"[Startup] UptimeKumaLoop started ({_heartbeatSec} sec. interval).")
         
         self.log(f"[Startup] {self.user} is ready and online!")
+    
+
+    @tasks.loop(seconds=60)
+    async def UptimeKumaLoop(self):
+        """Task Loop: Uptime Kuma Loop
+        
+        Runs every interval period and sends a heartbeat to Uptime Kuma
+        by making a GET request to the configured Push URL.
+        """
+        requests.get(self.config['UptimeKuma']['PushURL'])
+        if self.config['UptimeKuma']['LogPush']:
+            self.log("[General] Uptime Kuma heartbeat pushed.")
     
     async def on_application_command_error(self, ctx, error):
         """Event: On Command Error
