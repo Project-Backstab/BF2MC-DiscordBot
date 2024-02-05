@@ -78,7 +78,7 @@ class CogServerStatus(discord.Cog):
             for _d in self.lfg:
                 _names += f"{_d['name']}\n"
                 _p_gamemodes += f"{LFG_GAMEMODE_CHOICES[_d['gamemode']].name}\n"
-                _p_players += f"{str(_d['min_players']).rjust(7)}\n"
+                _p_players += f"{str(_d['min_players']).rjust(10)}\n"
             _names += "```"
             _p_gamemodes += "```"
             _p_players += "```"

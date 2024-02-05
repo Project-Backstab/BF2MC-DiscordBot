@@ -921,7 +921,7 @@ class CogPlayerStats(discord.Cog):
             required=True
         )
     ):
-        """Slash Command: /stats nickname claim
+        """Slash Command: /player nickname claim
         
         Allows the caller to associate their Discord account with an existing nickname
         in the database, which allows them to 'own' that nickname as their own.
@@ -962,7 +962,7 @@ class CogPlayerStats(discord.Cog):
         self.bot.log(f'[PlayerStats] {ctx.author.name}#{ctx.author.discriminator} has claimed the nickname "{nickname}".')
         _response = f':white_check_mark: Nickname "{_escaped_nickname}" has successfully been claimed!'
         _response += "\n\nYour Discord name will now display alongside the nickname's stats."
-        _response += "\nYou can also change your stats profile to a unique color with `/stats nickname color` if you wish."
+        _response += "\nYou can also change your stats profile to a unique color with `/player nickname color` if you wish."
         return await ctx.respond(_response, ephemeral=True)
     
     @nickname.command(name = "color", description="Change the stats profile color for a nickname you own")
@@ -999,7 +999,7 @@ class CogPlayerStats(discord.Cog):
             required=True
         )
     ):
-        """Slash Command: /stats nickname color
+        """Slash Command: /player nickname color
         
         Changes the stats embed color in the database for a given nickname if the author owns said nickname.
         """
@@ -1020,7 +1020,7 @@ class CogPlayerStats(discord.Cog):
             ("profileid=%s", [_profileid])
         )
         if _discord_uid == None or _discord_uid['discord_uid'] != ctx.author.id:
-            return await ctx.respond(f':warning: You do not own the nickname "{_escaped_nickname}"\n\nPlease use `/stats nickname claim` to claim it first.', ephemeral=True)
+            return await ctx.respond(f':warning: You do not own the nickname "{_escaped_nickname}"\n\nPlease use `/player nickname claim` to claim it first.', ephemeral=True)
         
         # Insert or update profile customization colors
         self.bot.db_discord.insertOrUpdate(
@@ -1034,7 +1034,6 @@ class CogPlayerStats(discord.Cog):
             ["profileid"]
         )
         await ctx.respond(f'Successfully changed the stats profile color to ({red}, {green}, {blue}) for "{_escaped_nickname}"!', ephemeral=True)
-            
     
     @nickname.command(name = "assign", description="Assigns a Discord member to a nickname. Only admins can do this.")
     async def assign(
@@ -1052,14 +1051,14 @@ class CogPlayerStats(discord.Cog):
             required=True
         )
     ):
-        """Slash Command: /stats nickname assign
+        """Slash Command: /player nickname assign
         
         Assigns a Discord member to be the owner of a nickname. Only admins can do this.
         """
         # Only members with Manage Channels permission can use this command.
         if not ctx.author.guild_permissions.manage_channels:
             _msg = ":warning: You do not have permission to run this command."
-            _msg += "\n\nPlease try using `/stats nickname claim`, or contact an admin if you need to claim another nickname."
+            _msg += "\n\nPlease try using `/player nickname claim`, or contact an admin if you need to claim another nickname."
             return await ctx.respond(_msg, ephemeral=True)
         
         _escaped_nickname = self.bot.escape_discord_formatting(nickname)
@@ -1099,7 +1098,7 @@ class CogPlayerStats(discord.Cog):
             description="Discord member"
         )
     ):
-        """Slash Command: /stats nickname ownedby
+        """Slash Command: /player nickname ownedby
         
         Displays which nicknames are owned by a given Discord member.
         """
@@ -1131,8 +1130,6 @@ class CogPlayerStats(discord.Cog):
         _nicknames += "```"
         _created += "```"
         _last_seen += "```"
-        _footer_text = "BF2:MC Online  |  Player Stats"
-        _footer_icon_url = CS.BOT_ICON_URL
         _embed = discord.Embed(
             title=f"{_member_name}'s BF2:MC Online Nicknames",
             color=member.color
@@ -1141,8 +1138,89 @@ class CogPlayerStats(discord.Cog):
         _embed.add_field(name="Nicknames:", value=_nicknames, inline=True)
         _embed.add_field(name="Created:", value=_created, inline=True)
         _embed.add_field(name="Last Seen:", value=_last_seen, inline=True)
-        _embed.set_footer(text=_footer_text, icon_url=_footer_icon_url)
+        _embed.set_footer(
+            text="BF2:MC Online  |  Player Stats", 
+            icon_url=CS.BOT_ICON_URL
+        )
         await ctx.respond(embed=_embed)
+    
+    @nickname.command(name = "alts", description="Displays possible alt nicknames of a player. Only admins can do this.")
+    async def alts(
+        self, 
+        ctx,
+        nickname: discord.Option(
+            str, 
+            description="BF2:MC Online nickname", 
+            autocomplete=discord.utils.basic_autocomplete(get_uniquenicks), 
+            max_length=255, 
+            required=True
+        )
+    ):
+        """Slash Command: /player nickname alts
+        
+        Displays possible alt nicknames of a player. Only admins can do this.
+        """
+        # Only members with Manage Channels permission can use this command.
+        if not ctx.author.guild_permissions.manage_channels:
+            _msg = ":warning: You do not have permission to run this command."
+            return await ctx.respond(_msg, ephemeral=True)
+        
+        await ctx.defer() # Temp fix for slow SQL queries
+        # Get IP and password hash of query nickname
+        _escaped_nickname = self.bot.escape_discord_formatting(nickname)
+        _nick_data = self.bot.db_backend.getOne(
+            "Players", 
+            ["last_login_ip", "password"], 
+            ("uniquenick=%s", [nickname])
+        )
+        if _nick_data == None:
+            return await ctx.respond(
+                f':warning: An account with the nickname of "{_escaped_nickname}" could not be found.', 
+                ephemeral=True
+            )
+        
+        # Get all nicknames with same IP
+        _alts_same_ip = self.bot.db_backend.getAll(
+            "Players", 
+            ["uniquenick"], 
+            ("last_login_ip = %s and uniquenick != %s", [_nick_data['last_login_ip'], nickname])
+        )
+        # Get all nicknames with same password hash
+        _alts_same_pass = self.bot.db_backend.getAll(
+            "Players", 
+            ["uniquenick"], 
+            ("password = %s and uniquenick != %s", [_nick_data['password'], nickname])
+        )
+        _alts_both = [_alt for _alt in _alts_same_ip if _alt in _alts_same_pass]
+        # Check if no alts found
+        if _alts_same_ip == None and _alts_same_pass == None:
+            return await ctx.respond(
+                f":information_source: {_escaped_nickname} likely doesn't have any alts.", 
+                ephemeral=True
+            )
+        
+        # Build embed
+        _ip_list = "```\n"
+        _pass_list = "```\n"
+        _both_list = "```\n"
+        for _alt in _alts_same_ip:
+            _ip_list += f"{_alt['uniquenick']}\n"
+        for _alt in _alts_same_pass:
+            _pass_list += f"{_alt['uniquenick']}\n"
+        for _alt in _alts_both:
+            _both_list += f"{_alt['uniquenick']}\n"
+        _ip_list += "```"
+        _pass_list += "```"
+        _both_list += "```"
+        _embed = discord.Embed(
+            title=f"{_escaped_nickname}'s Possible Alts",
+            color=discord.Colour.blurple()
+        )
+        _embed.add_field(name="Based on IP (Likely):", value=_ip_list, inline=True)
+        _embed.add_field(name="Based on Password (Less Likely):", value=_pass_list, inline=True)
+        _embed.add_field(name="Both (Very Likely):", value=_both_list, inline=True)
+        _embed.set_footer(text="BF2:MC Online  |  Player Stats (Confidential)", icon_url=CS.BOT_ICON_URL)
+        await ctx.respond(embed=_embed, ephemeral=True)
 
 
 def setup(bot):

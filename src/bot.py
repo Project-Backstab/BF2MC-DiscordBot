@@ -76,6 +76,7 @@ class BackstabBot(discord.Bot):
         """Get Player Attribute List String
         
         Returns a formatted code block string that contains a list of a given attribute for all players.
+        Players is list of dictionaries from API.
         Accepted Attributes: name, score, deaths
         """
         _str = "```\n"
