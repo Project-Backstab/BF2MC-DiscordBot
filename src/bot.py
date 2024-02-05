@@ -1,7 +1,7 @@
 """bot.py
 
 A subclass of `discord.Bot` that adds ease-of-use instance variables and functions (e.g. database object).
-Date: 02/04/2024
+Date: 02/05/2024
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -323,14 +323,18 @@ class BackstabBot(discord.Bot):
         if kwargs:
             _url += "?"
             for _i, (_k, _v) in enumerate(kwargs.items()):
-                if _i > 0:
-                    _url += "&"
-                _url += f"{_k}={_v}"
+                if _v != None:
+                    if _i > 0:
+                        _url += "&"
+                    _url += f"{_k}={_v}"
 
         # Make an HTTP GET request to the API endpoint
         self.log(f"[General] Querying API: {_url}", end='', file=False)
         if not _DEBUG:
-            _response = requests.get(_url, timeout=3)
+            try:
+                _response = requests.get(_url, timeout=3)
+            except Exception as e:
+                _response = e
         self.last_query = datetime.utcnow()
 
         # Check if the request was successful (status code 200 indicates success)
@@ -338,12 +342,12 @@ class BackstabBot(discord.Bot):
             self.reload_config()
             self.log("\tSuccess (DEBUG).", time=False, file=False)
             return _DEBUG
-        elif _response.status_code == 200:
+        elif isinstance(_response, requests.Response) and _response.status_code == 200:
             self.log("\tSuccess.", time=False, file=False)
             # Parse the JSON response
             return _response.json()
         else:
-            self.log("\tFailed!", time=False, file=False)
+            self.log(f"\tFailed!\n\t{_response}", time=False, file=False)
             return None
     
     async def cmd_query_api(self, url_subfolder: str, **kwargs) -> json:

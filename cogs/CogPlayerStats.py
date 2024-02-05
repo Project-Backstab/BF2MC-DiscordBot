@@ -1,12 +1,13 @@
 """CogPlayerStats.py
 
 Handles tasks related to checking player stats and info.
-Date: 10/27/2023
+Date: 02/05/2023
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
 
 import hashlib
+from urllib.parse import quote as url_escape
 
 import discord
 from discord.ext import commands
@@ -896,6 +897,127 @@ class CogPlayerStats(discord.Cog):
             _pages = [Page(embeds=[_embed])]
         _paginator = Paginator(pages=_pages, author_check=False)
         await _paginator.respond(ctx.interaction)
+    
+    @player.command(name = "message", description="Send an in-game message to an online BF2:MC player. Only admins can do this.")
+    async def player_message(
+        self, 
+        ctx,
+        nickname: discord.Option(
+            str, 
+            description='BF2:MC Online nickname (or "all" to message all players)', 
+            autocomplete=discord.utils.basic_autocomplete(get_uniquenicks), 
+            max_length=255, 
+            required=True
+        ),
+        message: discord.Option(
+            str, 
+            description="Message to send", 
+            max_length=255, 
+            required=True
+        )
+    ):
+        """Slash Command: /player message
+        
+        Sends an in-game message to an online BF2:MC player. Only admins can do this.
+        """
+        # Only members with Manage Channels permission can use this command.
+        if not ctx.author.guild_permissions.manage_channels:
+            _msg = ":warning: You do not have permission to run this command."
+            return await ctx.respond(_msg, ephemeral=True)
+        
+        await ctx.defer(ephemeral=True) # Temp fix for slow SQL queries
+
+        # Get and check profile ID for nickname (if specified)
+        _escaped_nickname = self.bot.escape_discord_formatting(nickname)
+        _profileid = None
+        if nickname.lower() != "all":
+            _profileid = self.get_profileid_for_nick(nickname)
+            if _profileid == None:
+                return await ctx.respond(
+                    f':warning: An account with the nickname of "{_escaped_nickname}" could not be found.', 
+                    ephemeral=True
+                )
+        
+        # Send message and report if successful
+        _response = await self.bot.query_api(
+            "admin/message", 
+            password=self.bot.config['API']['Password'], 
+            message=url_escape(message), 
+            profileid=_profileid
+        )
+        if _response:
+            if _response['result'] == 'OK':
+                self.bot.log(f'[Admin] {ctx.author.name} sent the following in-game message to {nickname}:\n\t"{message}"')
+                return await ctx.respond(
+                    f":white_check_mark: Message sent to {_escaped_nickname}!", 
+                    ephemeral=True
+                )
+            else:
+                return await ctx.respond(
+                    f":warning: Unable to send message to {_escaped_nickname} because they are not currently online.", 
+                    ephemeral=True
+                )
+        else:
+            return await ctx.respond(
+                f":warning: Message send failed! (See console for more details)", 
+                ephemeral=True
+            )
+    
+    @player.command(name = "kick", description="Kick an online BF2:MC player. Only admins can do this.")
+    async def player_kick(
+        self, 
+        ctx,
+        nickname: discord.Option(
+            str, 
+            description='BF2:MC Online nickname', 
+            autocomplete=discord.utils.basic_autocomplete(get_uniquenicks), 
+            max_length=255, 
+            required=True
+        )
+    ):
+        """Slash Command: /player kick
+        
+        Kicks an online BF2:MC player. Only admins can do this.
+        """
+        # Only members with Manage Channels permission can use this command.
+        if not ctx.author.guild_permissions.manage_channels:
+            _msg = ":warning: You do not have permission to run this command."
+            return await ctx.respond(_msg, ephemeral=True)
+        
+        await ctx.defer(ephemeral=True) # Temp fix for slow SQL queries
+
+        # Get and check profile ID for nickname
+        _escaped_nickname = self.bot.escape_discord_formatting(nickname)
+        _profileid = self.get_profileid_for_nick(nickname)
+        if _profileid == None:
+            return await ctx.respond(
+                f':warning: An account with the nickname of "{_escaped_nickname}" could not be found.', 
+                ephemeral=True
+            )
+        
+        # Kick player and report if successful
+        _response = await self.bot.query_api(
+            "admin/kick", 
+            password=self.bot.config['API']['Password'], 
+            profileid=_profileid
+        )
+        if _response:
+            if _response['result'] == 'OK':
+                self.bot.log(f"[Admin] {ctx.author.name} kicked {nickname} from BFMCspy.")
+                return await ctx.respond(
+                    f":white_check_mark: Kicked {_escaped_nickname}!", 
+                    ephemeral=True
+                )
+            else:
+                return await ctx.respond(
+                    f":warning: Unable to kick {_escaped_nickname} because they are not currently online.", 
+                    ephemeral=True
+                )
+        else:
+            return await ctx.respond(
+                f":warning: Kick failed! (See console for more details)", 
+                ephemeral=True
+            )
 
     """Slash Command Sub-Group: /player nickname
     
@@ -1165,7 +1287,8 @@ class CogPlayerStats(discord.Cog):
             _msg = ":warning: You do not have permission to run this command."
             return await ctx.respond(_msg, ephemeral=True)
         
-        await ctx.defer() # Temp fix for slow SQL queries
+        await ctx.defer(ephemeral=True) # Temp fix for slow SQL queries
+
         # Get IP and password hash of query nickname
         _escaped_nickname = self.bot.escape_discord_formatting(nickname)
         _nick_data = self.bot.db_backend.getOne(
@@ -1185,15 +1308,18 @@ class CogPlayerStats(discord.Cog):
             ["uniquenick"], 
             ("last_login_ip = %s and uniquenick != %s", [_nick_data['last_login_ip'], nickname])
         )
+        if _alts_same_ip == None: _alts_same_ip = []
         # Get all nicknames with same password hash
         _alts_same_pass = self.bot.db_backend.getAll(
             "Players", 
             ["uniquenick"], 
             ("password = %s and uniquenick != %s", [_nick_data['password'], nickname])
         )
+        if _alts_same_pass == None: _alts_same_pass = []
         _alts_both = [_alt for _alt in _alts_same_ip if _alt in _alts_same_pass]
+        if _alts_both == None: _alts_both = []
         # Check if no alts found
-        if _alts_same_ip == None and _alts_same_pass == None:
+        if len(_alts_same_ip) + len(_alts_same_pass) < 1:
             return await ctx.respond(
                 f":information_source: {_escaped_nickname} likely doesn't have any alts.", 
                 ephemeral=True
