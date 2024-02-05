@@ -1,7 +1,7 @@
 """bot.py
 
 A subclass of `discord.Bot` that adds ease-of-use instance variables and functions (e.g. database object).
-Date: 02/03/2024
+Date: 02/04/2024
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -83,9 +83,9 @@ class BackstabBot(discord.Bot):
             if attribute == 'name':
                 _str += f"{_i+1}. {_p[attribute]}\n"
             elif attribute == 'score':
-                _str += f"  {str(_p[attribute]).rjust(2)} pts\n"
+                _str += f"{str(_p[attribute]).rjust(4)} pts\n"
             elif attribute == 'deaths':
-                _str += f"   {str(_p['deaths']).rjust(2)}\n"
+                _str += f"{str(_p['deaths']).rjust(5)}\n"
         return _str + "```"
     
     @staticmethod
