@@ -1,7 +1,7 @@
 """CogServerStatus.py
 
 Handles tasks related to checking server status and info.
-Date: 01/30/2024
+Date: 02/04/2024
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -12,6 +12,11 @@ import common.CommonStrings as CS
 
 
 UPDATE_INTERVAL = 1.3 # Minutes
+LFG_GAMEMODE_CHOICES = [
+    discord.OptionChoice("Conquest", value=0), 
+    discord.OptionChoice("Capture the Flag", value=1),
+    discord.OptionChoice("Both (CQ & CTF)", value=2)
+]
 
 
 class CogServerStatus(discord.Cog):
@@ -29,7 +34,7 @@ class CogServerStatus(discord.Cog):
         Returns a list of Discord Embeds that each display each server's current statistics.
         Servers are listed in order of their player count, from highest to lowest.
         """
-        # Check for missing query data
+        ## Check for missing query data
         if servers == None:
             _description = """
             *BFMCspy API endpoint is currently down.*
@@ -46,7 +51,7 @@ class CogServerStatus(discord.Cog):
             _embed.set_footer(text=f"Data fetched at: {self.bot.last_query.strftime('%I:%M:%S %p UTC')} -- {self.bot.config['API']['HumanURL']}")
             return [_embed]
         
-        # Check for no servers online
+        ## Check for no servers online
         if len(servers) < 1:
             _description = f"""
             There are no game servers currently online :cry:
@@ -61,9 +66,37 @@ class CogServerStatus(discord.Cog):
             _embed.set_footer(text=f"Data fetched at: {self.bot.last_query.strftime('%I:%M:%S %p UTC')} -- {self.bot.config['API']['HumanURL']}")
             return [_embed]
 
-        # Default - Build server status embeds
+        ## Default - Build server status embeds
         _embeds = []
-        # Sort by player count and limit to top 3 servers
+
+        # Build LFG embed (if not empty)
+        _num_lfg = len(self.lfg)
+        if _num_lfg > 0:
+            _names = "```\n"
+            _p_gamemodes = "```\n"
+            _p_players = "```\n"
+            for _d in self.lfg:
+                _names += f"{_d['name']}\n"
+                _p_gamemodes += f"{LFG_GAMEMODE_CHOICES[_d['gamemode']].name}\n"
+                _p_players += f"{str(_d['min_players']).rjust(10)}\n"
+            _names += "```"
+            _p_gamemodes += "```"
+            _p_players += "```"
+            _embed = discord.Embed(
+                title=f"{_num_lfg} members are looking to play", 
+                description="Use `/lfg join` to join this list and get notified when enough players are online.", 
+                color=discord.Colour.blurple()
+            )
+            _embed.set_author(
+                name="Looking for Game (LFG) System", 
+                icon_url="https://upload.wikimedia.org/wikipedia/commons/thumb/9/9c/Magnifying_glass_CC0.svg/1200px-Magnifying_glass_CC0.svg.png"
+            )
+            _embed.add_field(name="Members Waiting:", value=_names, inline=True)
+            _embed.add_field(name="Preferred Gamemode:", value=_p_gamemodes, inline=True)
+            _embed.add_field(name="Preferred # of Players:", value=_p_players, inline=True)
+            _embeds.append(_embed)
+
+        # Sort by player count and limit to top 3 server embeds
         _sorted_servers = sorted(servers, key=lambda x: x['numplayers'], reverse=True)
         _sorted_servers = _sorted_servers[:3]
         for _s in _sorted_servers:
@@ -228,79 +261,70 @@ class CogServerStatus(discord.Cog):
         elif self.server_status == "unknown":
             await self.set_status_channel_name("unknown")
             _live_servers = None
+        
+        ## Check LFG users
+        await self.do_lfg_check(_live_servers)
 
         ## Update stats channel post
         _msg = f"## Total Players Online: {self.total_online}"
         _msg += "\n*Note: Only the top 3 most populated servers are displayed*"
+        _embeds = self.get_server_status_embeds(_live_servers)
         # Post already exists
         if self.status_msg != None:
             try:
-                await self.status_msg.edit(_msg, embeds=self.get_server_status_embeds(_live_servers))
+                await self.status_msg.edit(_msg, embeds=_embeds)
             except Exception as e:
                 self.bot.log("[WARNING] Unable to edit server status message. Is the Discord API down?")
                 self.bot.log(f"Exception:\n{e}", time=False)
         # First post needs to be made
         else:
             _text_channel = self.bot.get_channel(self.bot.config['ServerStatus']['ServerStatusTextChannelID'])
-            self.status_msg = await _text_channel.send(_msg, embeds=self.get_server_status_embeds(_live_servers))
+            self.status_msg = await _text_channel.send(_msg, embeds=_embeds)
+
+
+    """Slash Command Group: /lfg
+    
+    A group of commands related to joining, editing, or leaving the Looking for Game (LFG) queue.
+    """
+    lfg = discord.SlashCommandGroup("lfg", "Commands related to joining, editing, or leaving the Looking for Game (LFG) queue")
+
+    def get_dict_in_lfg_for_uid(self, uid: int) -> dict:
+        """Get Dictionary in LFG list for UID
         
-        ## Check LFG users
-        await self.do_lfg_check(_live_servers)
-
-
-    @discord.slash_command(name = "lfg", description="Looking for Game -- Get notified when multiple people are waiting to play")
-    async def lfg(
+        Helper function for LFG Slash Commands.
+        Returns None if not found in list.
+        """
+        for _d in self.lfg:
+            if _d['uid'] == uid: return _d
+        return None
+    
+    @lfg.command(name = "join", description="Join Looking for Game -- Get notified when multiple people are ready to play")
+    async def lfg_join(
         self, 
         ctx, 
         gamemode: discord.Option(
             int, 
             description="Which gamemode(s) to look for", 
-            choices=[
-                discord.OptionChoice("Conquest", value=0), 
-                discord.OptionChoice("Capture the Flag", value=1),
-                discord.OptionChoice("Both (Default)", value=2)
-            ],
-            default=2
+            choices=LFG_GAMEMODE_CHOICES, 
+            required=True
         ),
         min_players: discord.Option(
             int, 
             description="Minimum players (playing and/or looking for game)", 
             min_value=1, 
             max_value=27, 
-            default=3
-        ),
-        remove: discord.Option(
-            bool, 
-            description="Remove yourself from looking from game", 
-            default=False
+            required=True
         )
     ):
-        """Slash Command: /lfg
+        """Slash Command: /lfg join
         
         Looking for Game (LFG)
         Caller specifies what gamemode and minimum players they want to play with
         and get's added to the LFG list to be notified later when those requirements are met.
         """
-        _lfg_user = None
-
-        # Check if they are already in the LFG list
-        for _d in self.lfg:
-            if _d['uid'] == ctx.author.id:
-                # Remove them if specified
-                if remove:
-                    self.lfg.remove(_d)
-                    self.bot.log(f"[LFG] Removed user {ctx.author.name} from LFG ({len(self.lfg)} total LFG).")
-                    _msg = "Successfully removed you from the Looking for Game system."
-                    _msg += "\n\nYou will no longer get a notification (unless you sign up again)."
-                    return await ctx.respond(_msg, ephemeral=True)
-                # Get pointer to existing user to update
-                _lfg_user = _d
-                break
-        # If specified to remove, but couldn't find, display warning message
-        if remove and not _lfg_user:
-            return await ctx.respond(":warning: You are not currently looking for a game.", ephemeral=True)
+        _lfg_user = self.get_dict_in_lfg_for_uid(ctx.author.id)
         
-        # Update preferences in LFG list
+        # If caller already in LFG list, update preferences
         if _lfg_user:
             if _lfg_user['gamemode'] != gamemode:
                 _lfg_user['gamemode'] = gamemode
@@ -318,14 +342,84 @@ class CogServerStatus(discord.Cog):
             "min_players": min_players
         }
         self.lfg.append(_lfg_user)
-        self.bot.log(f"[LFG] Added user {ctx.author.name} to LFG ({len(self.lfg)} total LFG).")
-        _msg = ":white_check_mark: You have successfully signed up for LFG!"
-        _msg += "\n\nYou will get a notification from me (via private message) when a server:"
-        _msg += "\n- Matches the gamemode you are looking for"
-        _msg += "\n- Meets your minimum number of people playing and/or waiting for that gamemode"
-        _msg += "\n\n*(If you wish to remove yourself from LFG, use*  `/lfg remove True`  *)*"
-        return await ctx.respond(_msg, ephemeral=True)
+        self.bot.log(f"[LFG] Added user {_lfg_user['name']} to LFG ({len(self.lfg)} total LFG).")
 
+        # Send info message and reply embed
+        _escaped_name = self.bot.escape_discord_formatting(_lfg_user['name'])
+        _description = "Use `/lfg join` to let them know you want to play too!"
+        _description += f"\nSee who else is looking to play: <#{self.bot.config['ServerStatus']['ServerStatusTextChannelID']}>"
+        _embed = discord.Embed(
+            title=f"{_escaped_name} is looking to play!", 
+            description=_description, 
+            color=discord.Colour.blurple()
+        )
+        _embed.set_author(
+            name="Looking for Game (LFG) System", 
+            icon_url="https://upload.wikimedia.org/wikipedia/commons/thumb/9/9c/Magnifying_glass_CC0.svg/1200px-Magnifying_glass_CC0.svg.png"
+        )
+        _embed.add_field(
+            name="Preferred Gamemode:", 
+            value=LFG_GAMEMODE_CHOICES[gamemode].name, 
+            inline=True
+        )
+        _embed.add_field(
+            name="Preferred # of Players:", 
+            value=min_players, 
+            inline=True
+        )
+        _embed.set_footer(text=f"{_lfg_user['name']}, check your DMs for a message with more info.")
+        _msg = ":white_check_mark: You have successfully signed up for LFG (Looking for Game)!"
+        _msg += "\n- You will get notification from me here when a server:"
+        _msg += "\n  - Matches the gamemode you are looking for"
+        _msg += "\n  - Meets your minimum number of people playing and/or waiting for that gamemode"
+        _msg += "\n- Use `/lfg edit` (in the BF2MC Discord server; not here) to edit your notification preferences."
+        _msg += "\n- Use `/lfg leave` to leave the LFG queue."
+        await ctx.author.send(_msg)
+        return await ctx.respond(embed=_embed)
+    
+    @lfg.command(name = "edit", description="Edit Looking for Game -- Get notified when multiple people are ready to play")
+    async def lfg_edit(
+        self, 
+        ctx, 
+        gamemode: discord.Option(
+            int, 
+            description="Which gamemode(s) to look for", 
+            choices=LFG_GAMEMODE_CHOICES, 
+            required=True
+        ),
+        min_players: discord.Option(
+            int, 
+            description="Minimum players (playing and/or looking for game)", 
+            min_value=1, 
+            max_value=27, 
+            required=True
+        )
+    ):
+        """Slash Command: /lfg edit
+        
+        Looking for Game (LFG)
+        Caller specifies what gamemode and minimum players they want to play with
+        and get's added to the LFG list to be notified later when those requirements are met.
+        """
+        return await self.lfg_join(ctx, gamemode, min_players)
+    
+    @lfg.command(name = "leave", description="Leave Looking for Game -- Leave the LFG queue and not get notified")
+    async def lfg_leave(self, ctx):
+        """Slash Command: /lfg leave
+        
+        Removes the caller from the LFG list if they are present.
+        """
+        _lfg_user = self.get_dict_in_lfg_for_uid(ctx.author.id)
+
+        if _lfg_user:
+            self.lfg.remove(_lfg_user)
+            self.bot.log(f"[LFG] Removed user {ctx.author.name} from LFG ({len(self.lfg)} total LFG).")
+            _msg = "Successfully removed you from the Looking for Game queue."
+            _msg += "\n\nYou will no longer get a notification (unless you sign up again)."
+            return await ctx.respond(_msg, ephemeral=True)
+        else:
+            return await ctx.respond(":warning: You are not currently looking for a game.", ephemeral=True)
+    
     
     """Slash Command Group: /server
     

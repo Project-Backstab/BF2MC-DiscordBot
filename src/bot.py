@@ -1,7 +1,7 @@
 """bot.py
 
 A subclass of `discord.Bot` that adds ease-of-use instance variables and functions (e.g. database object).
-Date: 02/03/2024
+Date: 02/05/2024
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -76,6 +76,7 @@ class BackstabBot(discord.Bot):
         """Get Player Attribute List String
         
         Returns a formatted code block string that contains a list of a given attribute for all players.
+        Players is list of dictionaries from API.
         Accepted Attributes: name, score, deaths
         """
         _str = "```\n"
@@ -83,9 +84,9 @@ class BackstabBot(discord.Bot):
             if attribute == 'name':
                 _str += f"{_i+1}. {_p[attribute]}\n"
             elif attribute == 'score':
-                _str += f"  {str(_p[attribute]).rjust(2)} pts\n"
+                _str += f"{str(_p[attribute]).rjust(4)} pts\n"
             elif attribute == 'deaths':
-                _str += f"   {str(_p['deaths']).rjust(2)}\n"
+                _str += f"{str(_p['deaths']).rjust(5)}\n"
         return _str + "```"
     
     @staticmethod
@@ -322,14 +323,18 @@ class BackstabBot(discord.Bot):
         if kwargs:
             _url += "?"
             for _i, (_k, _v) in enumerate(kwargs.items()):
-                if _i > 0:
-                    _url += "&"
-                _url += f"{_k}={_v}"
+                if _v != None:
+                    if _i > 0:
+                        _url += "&"
+                    _url += f"{_k}={_v}"
 
         # Make an HTTP GET request to the API endpoint
         self.log(f"[General] Querying API: {_url}", end='', file=False)
         if not _DEBUG:
-            _response = requests.get(_url, timeout=3)
+            try:
+                _response = requests.get(_url, timeout=3)
+            except Exception as e:
+                _response = e
         self.last_query = datetime.utcnow()
 
         # Check if the request was successful (status code 200 indicates success)
@@ -337,12 +342,12 @@ class BackstabBot(discord.Bot):
             self.reload_config()
             self.log("\tSuccess (DEBUG).", time=False, file=False)
             return _DEBUG
-        elif _response.status_code == 200:
+        elif isinstance(_response, requests.Response) and _response.status_code == 200:
             self.log("\tSuccess.", time=False, file=False)
             # Parse the JSON response
             return _response.json()
         else:
-            self.log("\tFailed!", time=False, file=False)
+            self.log(f"\tFailed!\n\t{_response}", time=False, file=False)
             return None
     
     async def cmd_query_api(self, url_subfolder: str, **kwargs) -> json:
