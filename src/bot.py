@@ -1,7 +1,7 @@
 """bot.py
 
 A subclass of `discord.Bot` that adds ease-of-use instance variables and functions (e.g. database object).
-Date: 02/05/2024
+Date: 02/18/2024
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -104,7 +104,7 @@ class BackstabBot(discord.Bot):
         self.config = BackstabBot.get_config()
         self.cur_query_data = None
         self.old_query_data = None
-        self.last_query = None
+        self.last_query_time = None
         self.game_over_ids = []
         self.infl = inflect.engine()
         self.log("", time=False) # Empty line to seperate runs in the log file
@@ -299,7 +299,7 @@ class BackstabBot(discord.Bot):
             )
             _embed.add_field(name="Players:", value=self.get_player_attr_list_str(_no_team, 'name'), inline=True)
         _embed.set_image(url=CS.MAP_IMAGES_URL.replace("<map_name>", server_data['map']))
-        _embed.set_footer(text=f"Data fetched at: {self.last_query.strftime('%I:%M:%S %p UTC')} -- {self.config['API']['HumanURL']}")
+        _embed.set_footer(text=f"Data fetched at: {self.last_query_time.strftime('%I:%M:%S %p UTC')} -- {self.config['API']['HumanURL']}")
 
         return _embed
     
@@ -307,7 +307,7 @@ class BackstabBot(discord.Bot):
         """Query API
         
         Returns JSON after querying API URL, or None if bad response.
-        Also sets instance variable last_query.
+        Also sets instance variable last_query_time.
         """
 
         # DEBUGGING
@@ -332,10 +332,10 @@ class BackstabBot(discord.Bot):
         self.log(f"[General] Querying API: {_url}", end='', file=False)
         if not _DEBUG:
             try:
-                _response = requests.get(_url, timeout=3)
+                _response = requests.get(_url, timeout=5)
             except Exception as e:
                 _response = e
-        self.last_query = datetime.utcnow()
+        self.last_query_time = datetime.utcnow()
 
         # Check if the request was successful (status code 200 indicates success)
         if _DEBUG:

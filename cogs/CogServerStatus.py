@@ -1,7 +1,7 @@
 """CogServerStatus.py
 
 Handles tasks related to checking server status and info.
-Date: 02/04/2024
+Date: 02/18/2024
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -48,7 +48,7 @@ class CogServerStatus(discord.Cog):
                     color=discord.Colour.yellow()
                 )
             _embed.set_thumbnail(url="https://upload.wikimedia.org/wikipedia/commons/thumb/8/8d/Computer_crash.svg/1200px-Computer_crash.svg.png")
-            _embed.set_footer(text=f"Data fetched at: {self.bot.last_query.strftime('%I:%M:%S %p UTC')} -- {self.bot.config['API']['HumanURL']}")
+            _embed.set_footer(text=f"Data fetched at: {self.bot.last_query_time.strftime('%I:%M:%S %p UTC')} -- {self.bot.config['API']['HumanURL']}")
             return [_embed]
         
         ## Check for no servers online
@@ -63,7 +63,7 @@ class CogServerStatus(discord.Cog):
                 color=discord.Colour.red()
             )
             _embed.set_thumbnail(url="https://upload.wikimedia.org/wikipedia/commons/thumb/8/8d/Computer_crash.svg/1200px-Computer_crash.svg.png")
-            _embed.set_footer(text=f"Data fetched at: {self.bot.last_query.strftime('%I:%M:%S %p UTC')} -- {self.bot.config['API']['HumanURL']}")
+            _embed.set_footer(text=f"Data fetched at: {self.bot.last_query_time.strftime('%I:%M:%S %p UTC')} -- {self.bot.config['API']['HumanURL']}")
             return [_embed]
 
         ## Default - Build server status embeds
@@ -112,6 +112,12 @@ class CogServerStatus(discord.Cog):
         and theoretical minimum users. The theoretical users is the sum of actual players
         and LFG users with similar preferences.
         """
+        # Check for missing query data
+        if servers == None:
+            if len(self.lfg) > 0:
+                self.bot.log("[LFG] Skipping LFG check (missing server data)")
+            return
+
         # Find server with most players for each gamemode
         _cond_cq_public = lambda s: s['gametype'] == "conquest" and not s['n0'] and not s['n1'] and s['numplayers'] < s['maxplayers']
         _cond_ctf_public = lambda s: s['gametype'] == "capturetheflag" and not s['n0'] and not s['n1'] and s['numplayers'] < s['maxplayers']
@@ -238,6 +244,10 @@ class CogServerStatus(discord.Cog):
                 if (_server['is_alive'] and _server['verified']):
                     _live_servers.append(_server)
                     _total_players += _server['numplayers']
+        else:
+            # API query failed
+            _live_servers = None
+            _total_players = "???"
         
         ## Update bot's activity if total players has changed
         if _total_players != self.total_online:
@@ -249,7 +259,6 @@ class CogServerStatus(discord.Cog):
         if self.server_status == "automatic":
             if _servers == None:
                 await self.set_status_channel_name("unknown")
-                _live_servers = None
             elif len(_live_servers) > 0:
                 await self.set_status_channel_name("online")
             else:
