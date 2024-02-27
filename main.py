@@ -176,7 +176,7 @@ def main():
         
     @bot.slash_command(guild_ids=[bot.config['GuildID']], name = "say", description="Makes the bot say something. Only admins can do this.")
     @discord.default_permissions(manage_channels=True) # Only members with Manage Channels permission can use this command.
-    async def say(ctx, text: discord.Option(str)):
+    async def say(ctx, text: discord.Option(str)): # type: ignore
         """Slash Command: /say
         
         Makes the bot say something. Only admins can do this.
@@ -193,12 +193,12 @@ def main():
             discord.Member, 
             description="Discord member to send DM to",
             required=True
-        ), 
+        ),  # type: ignore
         title: discord.Option(
             str, 
             description="Title of message",
             required=True
-        ), 
+        ),  # type: ignore
         color: discord.Option(
             str, 
             description="Accent color of message",
@@ -209,12 +209,12 @@ def main():
                 "Red"
             ],
             required=True
-        ), 
+        ),  # type: ignore
         message: discord.Option(
             str, 
             description="Message text",
             required=True
-        )
+        ) # type: ignore
     ):
         """Slash Command: /dm
         

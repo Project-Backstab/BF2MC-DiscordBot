@@ -108,84 +108,6 @@ class CogPlayerStats(discord.Cog):
             return _dbEntry['profileid']
         else:
             return None
-    
-    """
-    def time_to_sec(self, time: str) -> int:
-        # (DEPRECIATED) Turns a time string into seconds as an integer
-        hours, minutes, seconds = time.split(':')
-        return int(hours) * 3600 + int(minutes) * 60 + int(seconds)
-    """
-    
-    # async def check_stats_integrity(self, server_data: dict) -> bool:
-    #     """Check Stats Integrity
-        
-    #     If enabled in the config, checks final round data of a server for any suspicious stats
-    #     and reports them as a warning to the configured text channel.
-    #     Returns:
-    #     True == Clean
-    #     False == Warning
-    #     None == Disabled or Error
-        
-    #     The following are red flags that will trigger a warning:
-    #     - Either team has 9 or more flags capped (CTF only)
-    #     - Any player has 90 score or more
-    #     - Any team collectively has 0 score and the server had active players (no resistance / didn't spawn)
-    #     - Any team collectively has less than 2 deaths and more than 50 score (no resistance from enemy team)
-    #     """
-    #     if self.bot.config['PlayerStats']['IntegrityWarnings']['Enabled'] == False:
-    #         return None
-        
-    #     self.bot.log(f"Checking stats integrity... ", end='', time=False)
-
-    #     # Sanitize input (because I'm paranoid)
-    #     if server_data == None:
-    #         self.bot.log("Failed! (Invalid server data passed)", time=False)
-    #         return None
-        
-    #     # Skip blacklisted Server IDs
-    #     if server_data['id'] in self.bot.config['ServerStatus']['Blacklist']:
-    #         self.bot.log("Blacklisted Server (Skipping).", time=False)
-    #         return True
-        
-    #     async def _send_warning_msg(reason: str):
-    #         """To be called by any of the flags to send the warning message"""
-    #         self.bot.log("Warning!", time=False)
-    #         _text_channel = self.bot.get_channel(
-    #             self.bot.config['PlayerStats']['IntegrityWarnings']['TextChannelID']
-    #         )
-    #         _msg = ":warning: **Potentially Suspicious Game**"
-    #         _msg += f"\n*Reason: ||{reason}||*"
-    #         _embed = self.bot.get_server_status_embed(server_data)
-    #         await _text_channel.send(_msg, embed=_embed)
-
-    #     # Perform checks
-    #     _s_col_score = 0
-    #     for _t in server_data['teams']:
-    #         for _p in _t['players']:
-    #             _s_col_score += _p['score']
-    #     for _t in server_data['teams']:
-    #         # Check flags
-    #         if (server_data['gameType'] == "capturetheflag" and _t['score'] >= 9):
-    #             await _send_warning_msg("Many flags capped")
-    #             return False
-    #         _t_col_score = 0
-    #         _t_col_deaths = 0
-    #         # Check individual player score, and total collective score & deaths
-    #         for _p in _t['players']:
-    #             if _p['score'] >= 90:
-    #                 await _send_warning_msg("Player with 90 pts. or more")
-    #                 return False
-    #             _t_col_score += _p['score']
-    #             _t_col_deaths += _p['deaths']
-    #         if _t_col_score < 1 and _s_col_score >= 50:
-    #             await _send_warning_msg(f"Team {_t['country']} collectively didn't score any points (no resistance / didn't spawn?)")
-    #             return False
-    #         if _t_col_deaths < 2 and _t_col_score >= 50:
-    #             await _send_warning_msg(f"Team {_t['country']} collectively died less than 2 times (no resistance from enemy team?)")
-    #             return False
-        
-    #     self.bot.log("Clean.", time=False)
-    #     return True
 
     async def check_legacy_uniquenick(self, uniquenick: str) -> bool:
         """Check Legacy Unique Nickname
@@ -280,7 +202,7 @@ class CogPlayerStats(discord.Cog):
             autocomplete=discord.utils.basic_autocomplete(get_uniquenicks), 
             max_length=255, 
             required=True
-        )
+        ) # type: ignore
     ):
         """Slash Command: /player stats
         
@@ -795,7 +717,7 @@ class CogPlayerStats(discord.Cog):
             autocomplete=discord.utils.basic_autocomplete(get_owned_uniquenicks), 
             max_length=255, 
             required=True
-        )
+        ) # type: ignore
     ):
         """Slash Command: /player self
         
@@ -823,7 +745,7 @@ class CogPlayerStats(discord.Cog):
                 discord.OptionChoice(CS.LEADERBOARD_STRINGS['vehicles'], value='vehicles')
             ], 
             required=True
-        )
+        ) # type: ignore
     ):
         """Slash Command: /player leaderboard
         
@@ -908,13 +830,13 @@ class CogPlayerStats(discord.Cog):
             autocomplete=discord.utils.basic_autocomplete(get_uniquenicks), 
             max_length=255, 
             required=True
-        ),
+        ), # type: ignore
         message: discord.Option(
             str, 
             description="Message to send", 
             max_length=255, 
             required=True
-        )
+        ) # type: ignore
     ):
         """Slash Command: /player message
         
@@ -973,7 +895,7 @@ class CogPlayerStats(discord.Cog):
             autocomplete=discord.utils.basic_autocomplete(get_uniquenicks), 
             max_length=255, 
             required=True
-        )
+        ) # type: ignore
     ):
         """Slash Command: /player kick
         
@@ -1036,12 +958,12 @@ class CogPlayerStats(discord.Cog):
             autocomplete=discord.utils.basic_autocomplete(get_uniquenicks), 
             max_length=255, 
             required=True
-        ),
+        ), # type: ignore
         password: discord.Option(
             str, 
             description="BFMCspy login password for nickname", 
             required=True
-        )
+        ) # type: ignore
     ):
         """Slash Command: /player nickname claim
         
@@ -1098,28 +1020,28 @@ class CogPlayerStats(discord.Cog):
             autocomplete=discord.utils.basic_autocomplete(get_owned_uniquenicks), 
             max_length=255, 
             required=True
-        ), 
+        ),  # type: ignore
         red: discord.Option(
             int, 
             description="Red Value | 0-255", 
             min_value=0, 
             max_value=255, 
             required=True
-        ), 
+        ),  # type: ignore
         green: discord.Option(
             int, 
             description="Green Value | 0-255", 
             min_value=0, 
             max_value=255, 
             required=True
-        ), 
+        ),  # type: ignore
         blue: discord.Option(
             int, 
             description="Blue Value | 0-255", 
             min_value=0, 
             max_value=255, 
             required=True
-        )
+        ) # type: ignore
     ):
         """Slash Command: /player nickname color
         
@@ -1164,14 +1086,14 @@ class CogPlayerStats(discord.Cog):
         member: discord.Option(
             discord.Member, 
             description="Discord member (Set to BackStab bot to remove ownership)"
-        ), 
+        ),  # type: ignore
         nickname: discord.Option(
             str, 
             description="BF2:MC Online nickname", 
             autocomplete=discord.utils.basic_autocomplete(get_uniquenicks), 
             max_length=255, 
             required=True
-        )
+        ) # type: ignore
     ):
         """Slash Command: /player nickname assign
         
@@ -1218,7 +1140,7 @@ class CogPlayerStats(discord.Cog):
         member: discord.Option(
             discord.Member, 
             description="Discord member"
-        )
+        ) # type: ignore
     ):
         """Slash Command: /player nickname ownedby
         
@@ -1276,7 +1198,7 @@ class CogPlayerStats(discord.Cog):
             autocomplete=discord.utils.basic_autocomplete(get_uniquenicks), 
             max_length=255, 
             required=True
-        )
+        ) # type: ignore
     ):
         """Slash Command: /player nickname alts
         
