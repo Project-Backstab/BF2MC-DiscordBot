@@ -1,7 +1,7 @@
 """CogPlayerStats.py
 
 Handles tasks related to checking player stats and info.
-Date: 02/05/2023
+Date: 03/04/2024
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -447,7 +447,7 @@ class CogPlayerStats(discord.Cog):
             for _p in _patches_data:
                 _patchid_str = str(_p['patchid'])
                 try:
-                    _patches_emoji += self.bot.config['Patches'][_patchid_str][2]
+                    _patches_emoji += self.bot.config['Patches'][_patchid_str][2] + " "
                 except Exception:
                     self.bot.log(f"[PlayerStats] WARNING: PatchID {_patchid_str} not found in config! Skipping.")
         if _patches_emoji == "": _patches_emoji = None
