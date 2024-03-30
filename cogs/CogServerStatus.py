@@ -1,7 +1,7 @@
 """CogServerStatus.py
 
 Handles tasks related to checking server status and info.
-Date: 02/18/2024
+Date: 03/14/2024
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -100,7 +100,10 @@ class CogServerStatus(discord.Cog):
         _sorted_servers = sorted(servers, key=lambda x: x['numplayers'], reverse=True)
         _sorted_servers = _sorted_servers[:3]
         for _s in _sorted_servers:
-            _embeds.append(self.bot.get_server_status_embed(_s))
+            if _s['numplayers'] > 0: # Filter out empty servers
+                _embeds.append(self.bot.get_server_status_embed(_s))
+        if len(_embeds) < 1: # If all servers empty, show at least one
+            _embeds.append(self.bot.get_server_status_embed(_sorted_servers[0]))
         
         return _embeds
     

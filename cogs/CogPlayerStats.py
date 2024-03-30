@@ -1,7 +1,7 @@
 """CogPlayerStats.py
 
 Handles tasks related to checking player stats and info.
-Date: 03/04/2024
+Date: 03/30/2024
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -472,7 +472,7 @@ class CogPlayerStats(discord.Cog):
             _e_summary.add_field(name="Ribbons:", value=_ribbons_emoji, inline=False)
         if _patches_emoji:
             _e_summary.add_field(name="Patches:", value=_patches_emoji, inline=False)
-        _e_summary.add_field(name="PPH:", value=int(_player_data['pph']/100), inline=True)
+        _e_summary.add_field(name="PPH:", value=round(_player_data['pph']/100), inline=True)
         _e_summary.add_field(name="Total Score:", value=_player_data['score'], inline=True)
         _e_summary.add_field(name="Medals:", value=_num_medals, inline=True)
         _e_summary.add_field(name="Match Result History:", value=_match_history, inline=False)
@@ -794,7 +794,7 @@ class CogPlayerStats(discord.Cog):
                     elif stat == 'ttb':
                         _stats += f" {self.bot.infl.no('game', _e[stat])}\n"
                     elif stat == 'pph':
-                        _stats += f"{str(int(_e[stat]/100)).rjust(4)} PPH\n"
+                        _stats += f"{str(round(_e[stat]/100)).rjust(4)} PPH\n"
                     elif stat == 'time':
                         _stats += f"{str(int(_e[stat]/SECONDS_PER_HOUR)).rjust(5)} hrs.\n"
                     elif stat == 'kills':
