@@ -1,7 +1,7 @@
 """CogServerStatus.py
 
 Handles tasks related to checking server status and info.
-Date: 02/18/2024
+Date: 03/14/2024
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -100,7 +100,10 @@ class CogServerStatus(discord.Cog):
         _sorted_servers = sorted(servers, key=lambda x: x['numplayers'], reverse=True)
         _sorted_servers = _sorted_servers[:3]
         for _s in _sorted_servers:
-            _embeds.append(self.bot.get_server_status_embed(_s))
+            if _s['numplayers'] > 0: # Filter out empty servers
+                _embeds.append(self.bot.get_server_status_embed(_s))
+        if len(_embeds) < 1: # If all servers empty, show at least one
+            _embeds.append(self.bot.get_server_status_embed(_sorted_servers[0]))
         
         return _embeds
     
@@ -316,14 +319,14 @@ class CogServerStatus(discord.Cog):
             description="Which gamemode(s) to look for", 
             choices=LFG_GAMEMODE_CHOICES, 
             required=True
-        ),
+        ), # type: ignore
         min_players: discord.Option(
             int, 
             description="Minimum players (playing and/or looking for game)", 
             min_value=1, 
             max_value=27, 
             required=True
-        )
+        ) # type: ignore
     ):
         """Slash Command: /lfg join
         
@@ -395,14 +398,14 @@ class CogServerStatus(discord.Cog):
             description="Which gamemode(s) to look for", 
             choices=LFG_GAMEMODE_CHOICES, 
             required=True
-        ),
+        ), # type: ignore
         min_players: discord.Option(
             int, 
             description="Minimum players (playing and/or looking for game)", 
             min_value=1, 
             max_value=27, 
             required=True
-        )
+        ) # type: ignore
     ):
         """Slash Command: /lfg edit
         
@@ -464,7 +467,7 @@ class CogServerStatus(discord.Cog):
             description="Status to set the global server status to", 
             choices=["automatic", "online", "offline", "unknown"], 
             required=True
-        )
+        ) # type: ignore
     ):
         """Slash Command: /server setstatus
         

@@ -1,11 +1,12 @@
 """bot.py
 
 A subclass of `discord.Bot` that adds ease-of-use instance variables and functions (e.g. database object).
-Date: 02/18/2024
+Date: 02/26/2024
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
 
+import os
 import sys
 import json
 import requests
@@ -17,7 +18,9 @@ from simplemysql import SimpleMysql
 import inflect
 import common.CommonStrings as CS
 
-LOG_FILE = "BackstabBot.log"
+LOG_FOLDER = "logs"
+LOG_FILE = f"BackstabBot_{datetime.now().strftime('%m-%d-%Y_%H-%M-%S')}.log"
+LOG_PATH = os.path.join(LOG_FOLDER, LOG_FILE)
 
 
 class BackstabBot(discord.Bot):
@@ -38,7 +41,9 @@ class BackstabBot(discord.Bot):
         msg += end
         print(msg, end='', flush=True)
         if file:
-            with open(LOG_FILE, 'a') as _file:
+            if not os.path.exists(LOG_FOLDER):
+                os.makedirs(LOG_FOLDER)
+            with open(LOG_PATH, 'a') as _file:
                 _file.write(msg)
     
     @staticmethod
@@ -107,7 +112,6 @@ class BackstabBot(discord.Bot):
         self.last_query_time = None
         self.game_over_ids = []
         self.infl = inflect.engine()
-        self.log("", time=False) # Empty line to seperate runs in the log file
         self.log("[Startup] Bot successfully instantiated.")
         # Database Initialization
         try:

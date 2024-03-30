@@ -14,6 +14,7 @@ db_backups/
 
 # Log files
 *.log
+logs/
 
 # Maven
 target/

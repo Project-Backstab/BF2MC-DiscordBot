@@ -43,7 +43,7 @@ class CogServerStats(discord.Cog):
             description="Which gamemode to see the most played maps for", 
             choices=["Conquest", "Capture the Flag"], 
             required=True
-        )
+        ) # type: ignore
     ):
         """Slash Command: /mostplayed map
         
@@ -139,7 +139,7 @@ class CogServerStats(discord.Cog):
                 discord.OptionChoice("Both public & clan games", value=2)
             ],
             default=2
-        )
+        ) # type: ignore
     ):
         """Slash Command: /total games
         

@@ -58,7 +58,7 @@ class CogClanStats(discord.Cog):
             min_length=2, 
             max_length=3, 
             required=True
-        )
+        ) # type: ignore
     ):
         """Slash Command: /clan stats
         
@@ -235,7 +235,7 @@ class CogClanStats(discord.Cog):
                 discord.OptionChoice("Score", value='score')
             ], 
             required=True
-        )
+        ) # type: ignore
     ):
         """Slash Command: /clan leaderboard
         
