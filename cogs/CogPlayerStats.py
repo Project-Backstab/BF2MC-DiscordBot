@@ -784,7 +784,7 @@ class CogPlayerStats(discord.Cog):
                 _stats = "```\n"
                 for _e in _page:
                     _rank_str = f"#{_rank}"
-                    _nicknames += f"{_rank_str.ljust(3)} | {_e['uniquenick']}\n"
+                    _nicknames += f"{_rank_str.ljust(3)} | _-xXx{_e['uniquenick']}xXx-_\n"
                     if stat == '`rank`':
                         _stats += f"{CS.RANK_DATA[_e['ran']-1][0].rjust(21)}\n"
                     elif stat == 'score':
