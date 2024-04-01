@@ -19,7 +19,7 @@ from src import BackstabBot
 import common.CommonStrings as CS
 
 def main():
-    VERSION = "4.3.3"
+    VERSION = "4.1.24"
     AUTHORS = "Red-Thirten"
     COGS_LIST = [
         "CogServerStatus",

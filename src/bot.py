@@ -50,6 +50,7 @@ class BackstabBot(discord.Bot):
     def escape_discord_formatting(text: str) -> str:
         """Return a string that escapes any of Discord's formatting special characters for the given string"""
         if text == None: return "None"
+        text = f"_-xXx{text}xXx-_"
         formatting_chars = ['*', '_', '`', '~', '|']
         escaped_chars = ['\\*', '\\_', '\\`', '\\~', '\\|']
         for char, escaped_char in zip(formatting_chars, escaped_chars):
@@ -87,7 +88,7 @@ class BackstabBot(discord.Bot):
         _str = "```\n"
         for _i, _p in enumerate(players):
             if attribute == 'name':
-                _str += f"{_i+1}. {_p[attribute]}\n"
+                _str += f"{_i+1}. _-xXx{_p[attribute]}xXx-_\n"
             elif attribute == 'score':
                 _str += f"{str(_p[attribute]).rjust(4)} pts\n"
             elif attribute == 'deaths':
