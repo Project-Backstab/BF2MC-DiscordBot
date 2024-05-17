@@ -1,7 +1,7 @@
 """main.py
 
 Main file to start Backstab
-Date: 03/30/2024
+Date: 05/17/2024
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -19,7 +19,7 @@ from src import BackstabBot
 import common.CommonStrings as CS
 
 def main():
-    VERSION = "4.3.3"
+    VERSION = "4.3.4"
     AUTHORS = "Red-Thirten"
     COGS_LIST = [
         "CogServerStatus",
@@ -112,7 +112,10 @@ def main():
             return
         # Return if message not in config channels
         if message.channel.id not in bot.config['Translate']['TextChannelIDs']:
-            return 
+            return
+        # Return if message is less than configured character length
+        if len(message.content) < bot.config['Translate']['MinCharLength']:
+            return
         # Return if message contains any string in config blacklist
         if any(_s.lower() in message.content.lower() for _s in bot.config['Translate']['Blacklist']):
             return

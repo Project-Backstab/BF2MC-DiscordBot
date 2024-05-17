@@ -1,7 +1,7 @@
 """bot.py
 
 A subclass of `discord.Bot` that adds ease-of-use instance variables and functions (e.g. database object).
-Date: 02/26/2024
+Date: 05/17/2024
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -224,10 +224,10 @@ class BackstabBot(discord.Bot):
         _player_count = server_data['numplayers']
 
         # Setup embed color based on total player count or clan game
-        if _player_count == 0:
-            _color = discord.Colour.yellow()
-        elif _player_count == server_data['maxplayers']:
+        if _player_count >= server_data['maxplayers']:
             _color = discord.Colour.red()
+        elif _player_count < self.config['PlayerStats']['MatchMinPlayers']:
+            _color = discord.Colour.yellow()
         else:
             _color = discord.Colour.green()
 
