@@ -1,7 +1,7 @@
 """bot.py
 
 A subclass of `discord.Bot` that adds ease-of-use instance variables and functions (e.g. database object).
-Date: 05/17/2024
+Date: 05/24/2024
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -214,10 +214,10 @@ class BackstabBot(discord.Bot):
         
         Returns a formatted string for the team's score given the current gamemode.
         """
-        if gamemode == "conquest":
-            return f"***{self.infl.no('ticket', score)} remaining***"
-        else:
+        if gamemode == "capturetheflag":
             return f"***{self.infl.no('flag', score)} captured***"
+        else:
+            return f"***{self.infl.no('ticket', score)} remaining***"
     
     def get_server_status_embed(self, server_data: dict) -> discord.Embed:
         # Get total player count
@@ -276,7 +276,7 @@ class BackstabBot(discord.Bot):
         )
         _embed.set_thumbnail(url=CS.GM_THUMBNAILS_URL.replace("<gamemode>", server_data['gametype']))
         _embed.add_field(name="Players:", value=f"{_player_count}/{server_data['maxplayers']}", inline=False)
-        _embed.add_field(name="Gamemode:", value=CS.GM_STRINGS[server_data['gametype']][0], inline=True)
+        _embed.add_field(name="Gamemode:", value=CS.GM_STRINGS.get(server_data['gametype'], ("Unknown", 0))[0], inline=True)
         _embed.add_field(name="Time Elapsed:", value=self.sec_to_mmss(server_data['timeelapsed']), inline=True)
         _embed.add_field(name="Time Limit:", value=self.sec_to_mmss(server_data['timelimit']), inline=True)
         _embed.add_field(
