@@ -1,7 +1,8 @@
-git+https://github.com/Pycord-Development/pycord
+py-cord==2.6.0
+#git+https://github.com/Pycord-Development/pycord
+git+https://github.com/lilkingjr1/simplemysql
 requests
 inflect
-git+https://github.com/lilkingjr1/simplemysql
 iso-639
 langdetect
 deep-translator
