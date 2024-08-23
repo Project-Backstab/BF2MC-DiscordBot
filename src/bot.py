@@ -1,7 +1,7 @@
 """bot.py
 
 A subclass of `discord.Bot` that adds ease-of-use instance variables and functions (e.g. database object).
-Date: 05/24/2024
+Date: 08/22/2024
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -10,7 +10,7 @@ import os
 import sys
 import json
 import requests
-from datetime import datetime
+from datetime import datetime, timezone
 
 import discord
 from discord.ext import commands, tasks
@@ -307,10 +307,11 @@ class BackstabBot(discord.Bot):
 
         return _embed
     
-    async def query_api(self, url_subfolder: str, **kwargs) -> json:
+    async def query_api(self, url_subfolder: str = None, url: str = None, **kwargs) -> json:
         """Query API
         
-        Returns JSON after querying API URL, or None if bad response.
+        Returns JSON after querying URL (API URL if not specified), or None if bad response.
+        kwargs will be added as query parameters to the end of the URL.
         Also sets instance variable last_query_time.
         """
 
@@ -321,25 +322,26 @@ class BackstabBot(discord.Bot):
             _DEBUG = None
 
         # Build URL string
-        _url = self.config['API']['EndpointURL']
+        if not url:
+            url = self.config['API']['EndpointURL']
         if url_subfolder:
-            _url += f"/{url_subfolder}"
+            url += f"/{url_subfolder}"
         if kwargs:
-            _url += "?"
+            url += "?"
             for _i, (_k, _v) in enumerate(kwargs.items()):
                 if _v != None:
                     if _i > 0:
-                        _url += "&"
-                    _url += f"{_k}={_v}"
+                        url += "&"
+                    url += f"{_k}={_v}"
 
         # Make an HTTP GET request to the API endpoint
-        self.log(f"[General] Querying API: {_url}", end='', file=False)
+        self.log(f"[General] Querying API: {url}", end='', file=False)
         if not _DEBUG:
             try:
-                _response = requests.get(_url, timeout=5)
+                _response = requests.get(url, timeout=5)
             except Exception as e:
                 _response = e
-        self.last_query_time = datetime.utcnow()
+        self.last_query_time = datetime.now(timezone.utc)
 
         # Check if the request was successful (status code 200 indicates success)
         if _DEBUG:

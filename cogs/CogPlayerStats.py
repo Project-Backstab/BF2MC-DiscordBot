@@ -1,7 +1,7 @@
 """CogPlayerStats.py
 
 Handles tasks related to checking player stats and info.
-Date: 03/30/2024
+Date: 08/22/2024
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -847,10 +847,10 @@ class CogPlayerStats(discord.Cog):
             _msg = ":warning: You do not have permission to run this command."
             return await ctx.respond(_msg, ephemeral=True)
         
-        await ctx.defer(ephemeral=True) # Temp fix for slow SQL queries
+        await ctx.defer(ephemeral=True) # Defer just in case API call is slow
+        _escaped_nickname = self.bot.escape_discord_formatting(nickname)
 
         # Get and check profile ID for nickname (if specified)
-        _escaped_nickname = self.bot.escape_discord_formatting(nickname)
         _profileid = None
         if nickname.lower() != "all":
             _profileid = self.get_profileid_for_nick(nickname)
@@ -906,10 +906,10 @@ class CogPlayerStats(discord.Cog):
             _msg = ":warning: You do not have permission to run this command."
             return await ctx.respond(_msg, ephemeral=True)
         
-        await ctx.defer(ephemeral=True) # Temp fix for slow SQL queries
+        await ctx.defer(ephemeral=True) # Defer just in case API call is slow
+        _escaped_nickname = self.bot.escape_discord_formatting(nickname)
 
         # Get and check profile ID for nickname
-        _escaped_nickname = self.bot.escape_discord_formatting(nickname)
         _profileid = self.get_profileid_for_nick(nickname)
         if _profileid == None:
             return await ctx.respond(
@@ -1210,64 +1210,81 @@ class CogPlayerStats(discord.Cog):
             return await ctx.respond(_msg, ephemeral=True)
         
         await ctx.defer(ephemeral=True) # Temp fix for slow SQL queries
-
-        # Get IP and password hash of query nickname
+        self.bot.log(f"[Admin] {ctx.author.name} looked up alts for {nickname}.")
         _escaped_nickname = self.bot.escape_discord_formatting(nickname)
-        _nick_data = self.bot.db_backend.getOne(
-            "Players", 
-            ["last_login_ip", "password"], 
-            ("uniquenick=%s", [nickname])
+
+        # Get history of machine IDs of queried nickname
+        _machine_ids = self.bot.db_backend.leftJoin(
+            ("Players", "GameStatPlayers"), 
+            (["last_login_ip"], ["machine_id"]), 
+            ("profileid", "pid"), 
+            ('Players.uniquenick = %s and GameStatPlayers.machine_id != ""', [nickname])
         )
-        if _nick_data == None:
+        if _machine_ids == None:
             return await ctx.respond(
-                f':warning: An account with the nickname of "{_escaped_nickname}" could not be found.', 
+                f':warning: An account with the nickname of "{_escaped_nickname}" could not be found, or they have not played any recent games.', 
                 ephemeral=True
             )
+        _ip = _machine_ids[0]['last_login_ip']
+        # Convert to list of distinct machine IDs
+        _machine_ids = list(set(_d['machine_id'] for _d in _machine_ids))
         
-        # Get all nicknames with same IP
-        _alts_same_ip = self.bot.db_backend.getAll(
-            "Players", 
-            ["uniquenick"], 
-            ("last_login_ip = %s and uniquenick != %s", [_nick_data['last_login_ip'], nickname])
+        # Get data of all alts that have used any of these machine IDs
+        _placeholder_strings = ', '.join(['%s'] * len(_machine_ids))
+        _where_cond = f"Players.uniquenick != %s and GameStatPlayers.machine_id in ({_placeholder_strings})"
+        _where_cond_vars = _machine_ids.copy()
+        _where_cond_vars.insert(0, nickname)
+        _alt_data = self.bot.db_backend.leftJoin(
+            ("Players", "GameStatPlayers"), 
+            (["uniquenick", "last_login_ip"], []), 
+            ("profileid", "pid"), 
+            (_where_cond, _where_cond_vars)
         )
-        if _alts_same_ip == None: _alts_same_ip = []
-        # Get all nicknames with same password hash
-        _alts_same_pass = self.bot.db_backend.getAll(
-            "Players", 
-            ["uniquenick"], 
-            ("password = %s and uniquenick != %s", [_nick_data['password'], nickname])
-        )
-        if _alts_same_pass == None: _alts_same_pass = []
-        _alts_both = [_alt for _alt in _alts_same_ip if _alt in _alts_same_pass]
-        if _alts_both == None: _alts_both = []
         # Check if no alts found
-        if len(_alts_same_ip) + len(_alts_same_pass) < 1:
+        if _alt_data == None:
             return await ctx.respond(
                 f":information_source: {_escaped_nickname} likely doesn't have any alts.", 
                 ephemeral=True
             )
+        # Convert to list of dictionaries containing distinct nicknames
+        _seen_nicks = set()
+        _distinct_alts = []
+        for _d in _alt_data:
+            _n = _d['uniquenick']
+            if _n not in _seen_nicks:
+                _seen_nicks.add(_n)
+                _distinct_alts.append(_d)
+
+        # Get IP geolocation data
+        _ip_geo_data = await self.bot.query_api(
+            f"{_ip}/json", 
+            "https://ipinfo.io"
+        )
+        if _ip_geo_data == None:
+            _ip_geo_data = {
+                "country": "Error",
+                "region": "Error"
+            }
         
         # Build embed
-        _ip_list = "```\n"
-        _pass_list = "```\n"
-        _both_list = "```\n"
-        for _alt in _alts_same_ip:
-            _ip_list += f"{_alt['uniquenick']}\n"
-        for _alt in _alts_same_pass:
-            _pass_list += f"{_alt['uniquenick']}\n"
-        for _alt in _alts_both:
-            _both_list += f"{_alt['uniquenick']}\n"
-        _ip_list += "```"
-        _pass_list += "```"
-        _both_list += "```"
+        _alt_nicks = "```\n"
+        _alt_ips = "```\n"
+        for _d in _distinct_alts:
+            _alt_nicks += f"{_d['uniquenick']}\n"
+            _alt_ips += f"{_d['last_login_ip']}\n"
+        _alt_nicks += "```"
+        _alt_ips += "```"
         _embed = discord.Embed(
-            title=f"{_escaped_nickname}'s Possible Alts",
+            title=f"{_escaped_nickname}'s Alternate Accounts", 
+            description="*:warning: The following info is **confidential** & should not be shared with anyone! :warning:*", 
             color=discord.Colour.blurple()
         )
-        _embed.add_field(name="Based on IP (Likely):", value=_ip_list, inline=True)
-        _embed.add_field(name="Based on Password (Less Likely):", value=_pass_list, inline=True)
-        _embed.add_field(name="Both (Very Likely):", value=_both_list, inline=True)
-        _embed.set_footer(text="BF2:MC Online  |  Player Stats (Confidential)", icon_url=CS.BOT_ICON_URL)
+        _embed.add_field(name="IP Address:", value=_ip, inline=True)
+        _embed.add_field(name="Country*:", value=_ip_geo_data['country'], inline=True)
+        _embed.add_field(name="Region*:", value=_ip_geo_data['region'], inline=True)
+        _embed.add_field(name="Based on Machine ID:", value=_alt_nicks, inline=True)
+        _embed.add_field(name="Last Login IP:", value=_alt_ips, inline=True)
+        _embed.set_footer(text="BFMCspy Admin\n*Country & Region are based on IP geolocation", icon_url=CS.BOT_ICON_URL)
         await ctx.respond(embed=_embed, ephemeral=True)
 
 
