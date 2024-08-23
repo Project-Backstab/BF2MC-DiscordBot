@@ -1,7 +1,7 @@
 """CogPlayerStats.py
 
 Handles tasks related to checking player stats and info.
-Date: 08/22/2024
+Date: 08/23/2024
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -34,7 +34,7 @@ async def get_owned_uniquenicks(ctx: discord.AutocompleteContext):
     """Autocomplete Context: Get owned unique nicknames
     
     Returns array of all uniquenicks in the backend's database.
-    (Note: Can't use `leftJoin` because of two seperate schemas)
+    (Note: Can't use `leftJoin` because of two separate schemas)
     """
     # Get owned profileids
     _dbEntries = ctx.bot.db_discord.getAll(
@@ -45,8 +45,8 @@ async def get_owned_uniquenicks(ctx: discord.AutocompleteContext):
     if _dbEntries == None: return []
 
     # Get uniquenicks from profileids
-    _ids = [str(_id['profileid']) for _id in _dbEntries]
-    _ids = ",".join(_ids) # Has to be comma seperated string for query to work
+    _ids = [str(_d['profileid']) for _d in _dbEntries] # Extract dictionary data into list of strings
+    _ids = ",".join(_ids) # Has to be comma separated string for query to work
     _dbEntries = ctx.bot.db_backend.getAll(
         "Players",
         ["uniquenick"],
@@ -233,9 +233,9 @@ class CogPlayerStats(discord.Cog):
                     "mavd",     # Total MAV's destroyed, Medium Armored Vehicle (such as a Tank or similar)
                     "havd",     # Total HAV's destroyed, Heavy Armored Vehicle  (such as an APC or similar)
                     "hed",      # Total Helicopters destroyed
-                    "bod",      # Total Boats destoyed
-                    "k1",       # Total kills Assualt kit
-                    "s1",       # Total spawns Assualt kit
+                    "bod",      # Total Boats destroyed
+                    "k1",       # Total kills Assault kit
+                    "s1",       # Total spawns Assault kit
                     "k2",       # Total kills Sniper kit
                     "s2",       # Total spawns Sniper kit
                     "k3",       # Total kills Special Op. kit
@@ -411,7 +411,7 @@ class CogPlayerStats(discord.Cog):
         _fav_team = max(_team_games, key=_team_games.get)
         # Determine favorite kit
         _kit_spawns = {
-            "Assualt":          _player_data['s1'],
+            "Assault":          _player_data['s1'],
             "Sniper":           _player_data['s2'],
             "Special Op.":      _player_data['s3'],
             "Combat Engineer":  _player_data['s4'],
@@ -666,7 +666,7 @@ class CogPlayerStats(discord.Cog):
         )
         _e_kits.set_thumbnail(url=_rank_data[1])
         _e_kits.add_field(name="Favorite Kit (Most Spawns):", value=_fav_kit, inline=False)
-        _e_kits.add_field(name="Assult Kills:", value=_player_data['k1'], inline=True)
+        _e_kits.add_field(name="Assault Kills:", value=_player_data['k1'], inline=True)
         _e_kits.add_field(name="Sniper Kills:", value=_player_data['k2'], inline=True)
         _e_kits.add_field(name="Special Op. Kills:", value=_player_data['k3'], inline=True)
         _e_kits.add_field(name="Combat Engineer Kills:", value=_player_data['k4'], inline=True)
@@ -844,8 +844,10 @@ class CogPlayerStats(discord.Cog):
         """
         # Only members with Manage Channels permission can use this command.
         if not ctx.author.guild_permissions.manage_channels:
-            _msg = ":warning: You do not have permission to run this command."
-            return await ctx.respond(_msg, ephemeral=True)
+            return await ctx.respond(
+                ":warning: You do not have permission to run this command.", 
+                ephemeral=True
+            )
         
         await ctx.defer(ephemeral=True) # Defer just in case API call is slow
         _escaped_nickname = self.bot.escape_discord_formatting(nickname)
@@ -903,8 +905,10 @@ class CogPlayerStats(discord.Cog):
         """
         # Only members with Manage Channels permission can use this command.
         if not ctx.author.guild_permissions.manage_channels:
-            _msg = ":warning: You do not have permission to run this command."
-            return await ctx.respond(_msg, ephemeral=True)
+            return await ctx.respond(
+                ":warning: You do not have permission to run this command.", 
+                ephemeral=True
+            )
         
         await ctx.defer(ephemeral=True) # Defer just in case API call is slow
         _escaped_nickname = self.bot.escape_discord_formatting(nickname)
@@ -1146,28 +1150,32 @@ class CogPlayerStats(discord.Cog):
         
         Displays which nicknames are owned by a given Discord member.
         """
-        _member_name = self.bot.escape_discord_formatting(member.display_name)
+        await ctx.defer() # Temp fix for slow SQL queries
+        _escaped_member_name = self.bot.escape_discord_formatting(member.display_name)
 
-        _owned_profiles = self.bot.db_discord.getAll(
+        # Get owned profiles from bot's DB
+        _dbEntries = self.bot.db_discord.getAll(
             "DiscordUserLinks", 
             ["profileid"], 
             ("discord_uid = %s", [member.id])
         )
-        if _owned_profiles == None:
-            return await ctx.respond(f"{_member_name} has not claimed or been assigned any BF2:MC Online nicknames yet.", ephemeral=True)
+        if _dbEntries == None:
+            return await ctx.respond(f"{_escaped_member_name} has not claimed or been assigned any BF2:MC Online nicknames yet.")
 
-        _profiles_data = []
-        for _op in _owned_profiles:
-            _profile_data = self.bot.db_backend.getOne(
-                "Players", 
-                ["uniquenick", "created_at", "last_login"], 
-                ("profileid = %s", [_op['profileid']])
-            )
-            _profiles_data.append(_profile_data)
+        # Get owned profile data from BFMCspy's DB
+        _owned_profileids = [str(_d['profileid']) for _d in _dbEntries] # Extract dictionary data into list of strings
+        _owned_profileids = ",".join(_owned_profileids) # Has to be comma separated string for query to work
+        _dbEntries = self.bot.db_backend.getAll(
+            "Players", 
+            ["uniquenick", "created_at", "last_login"], 
+            (f"profileid IN ({_owned_profileids})", [])
+        )
+
+        # Build embed
         _nicknames = "```\n"
         _created = "```\n"
         _last_seen = "```\n"
-        for _p in _profiles_data:
+        for _p in _dbEntries:
             _nicknames += f"{_p['uniquenick']}\n"
             _created += f"{_p['created_at'].strftime('%m/%d/%Y')}\n"
             _last_seen += f"{_p['last_login'].strftime('%m/%d/%Y')}\n"
@@ -1175,7 +1183,7 @@ class CogPlayerStats(discord.Cog):
         _created += "```"
         _last_seen += "```"
         _embed = discord.Embed(
-            title=f"{_member_name}'s BF2:MC Online Nicknames",
+            title=f"{_escaped_member_name}'s BF2:MC Online Nicknames",
             color=member.color
         )
         _embed.set_thumbnail(url=member.display_avatar.url)
@@ -1206,42 +1214,42 @@ class CogPlayerStats(discord.Cog):
         """
         # Only members with Manage Channels permission can use this command.
         if not ctx.author.guild_permissions.manage_channels:
-            _msg = ":warning: You do not have permission to run this command."
-            return await ctx.respond(_msg, ephemeral=True)
+            return await ctx.respond(
+                ":warning: You do not have permission to run this command.", 
+                ephemeral=True
+            )
         
         await ctx.defer(ephemeral=True) # Temp fix for slow SQL queries
         self.bot.log(f"[Admin] {ctx.author.name} looked up alts for {nickname}.")
         _escaped_nickname = self.bot.escape_discord_formatting(nickname)
 
         # Get history of machine IDs of queried nickname
-        _machine_ids = self.bot.db_backend.leftJoin(
+        _dbEntries = self.bot.db_backend.leftJoin(
             ("Players", "GameStatPlayers"), 
             (["last_login_ip"], ["machine_id"]), 
             ("profileid", "pid"), 
-            ('Players.uniquenick = %s and GameStatPlayers.machine_id != ""', [nickname])
+            ('Players.uniquenick = %s AND GameStatPlayers.machine_id != ""', [nickname])
         )
-        if _machine_ids == None:
+        if _dbEntries == None:
             return await ctx.respond(
                 f':warning: An account with the nickname of "{_escaped_nickname}" could not be found, or they have not played any recent games.', 
                 ephemeral=True
             )
-        _ip = _machine_ids[0]['last_login_ip']
-        # Convert to list of distinct machine IDs
-        _machine_ids = list(set(_d['machine_id'] for _d in _machine_ids))
+        
+        # Get last login IP
+        _ip = _dbEntries[0]['last_login_ip']
         
         # Get data of all alts that have used any of these machine IDs
-        _placeholder_strings = ', '.join(['%s'] * len(_machine_ids))
-        _where_cond = f"Players.uniquenick != %s and GameStatPlayers.machine_id in ({_placeholder_strings})"
-        _where_cond_vars = _machine_ids.copy()
-        _where_cond_vars.insert(0, nickname)
-        _alt_data = self.bot.db_backend.leftJoin(
+        _machine_ids = list(set(f"'{_d['machine_id']}'" for _d in _dbEntries)) # Extract dictionary data into list of distinct strings
+        _machine_ids = ",".join(_machine_ids) # Has to be comma separated string for query to work
+        _dbEntries = self.bot.db_backend.leftJoin(
             ("Players", "GameStatPlayers"), 
             (["uniquenick", "last_login_ip"], []), 
             ("profileid", "pid"), 
-            (_where_cond, _where_cond_vars)
+            (f'Players.uniquenick != "{nickname}" AND GameStatPlayers.machine_id IN ({_machine_ids})', [])
         )
         # Check if no alts found
-        if _alt_data == None:
+        if _dbEntries == None:
             return await ctx.respond(
                 f":information_source: {_escaped_nickname} likely doesn't have any alts.", 
                 ephemeral=True
@@ -1249,7 +1257,7 @@ class CogPlayerStats(discord.Cog):
         # Convert to list of dictionaries containing distinct nicknames
         _seen_nicks = set()
         _distinct_alts = []
-        for _d in _alt_data:
+        for _d in _dbEntries:
             _n = _d['uniquenick']
             if _n not in _seen_nicks:
                 _seen_nicks.add(_n)

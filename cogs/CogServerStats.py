@@ -1,7 +1,7 @@
 """CogServerStats.py
 
 Handles tasks related to checking server stats and info.
-Date: 01/12/2024
+Date: 08/23/2024
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -148,10 +148,10 @@ class CogServerStats(discord.Cog):
         """
         if clan_games_filter == 0:
             _filter = "Public"
-            _db_condition = "clanid_t0 = 0 and clanid_t1 = 0 and numplayers >= %s"
+            _db_condition = "clanid_t0 = 0 AND clanid_t1 = 0 AND numplayers >= %s"
         elif clan_games_filter == 1:
             _filter = "Clan"
-            _db_condition = "clanid_t0 <> 0 and clanid_t1 <> 0 and numplayers >= %s"
+            _db_condition = "clanid_t0 <> 0 AND clanid_t1 <> 0 AND numplayers >= %s"
         else:
             _filter = "Public & Clan"
             _db_condition = "numplayers >= %s"
