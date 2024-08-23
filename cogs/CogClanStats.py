@@ -1,7 +1,7 @@
 """CogClanStats.py
 
 Handles tasks related to checking clan stats and info.
-Date: 10/25/2023
+Date: 08/22/2024
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -68,27 +68,36 @@ class CogClanStats(discord.Cog):
         _escaped_tag = self.bot.escape_discord_formatting(tag)
 
         ## Get clan data
-        _clan_data = self.bot.db_backend.getOne(
-            "Clans", 
-            [
-                "clanid",
-                "name",
-                "homepage",
-                "info",
-                "region",
-                "score",
-                "wins",
-                "losses",
-                "draws",
-                "created_at"
-            ], 
-            ("tag=%s", [tag])
+        _clan_data = self.bot.db_backend.leftJoin(
+            ("Clans", "Leaderboard_clan"), 
+            (
+                [
+                    "clanid",
+                    "name",
+                    "homepage",
+                    "info",
+                    "region",
+                    "score",
+                    "wins",
+                    "losses",
+                    "draws",
+                    "created_at"
+                ],
+                [
+                    "`rank`" # rank is escaped with ` because it is a reserved query word
+                ]
+            ),
+            ("clanid", "clanid"),
+            ("Clans.tag=%s and Clans.disable=0", [tag])
         )
         if _clan_data == None:
             return await ctx.respond(
                 f':warning: A clan with the tag of "{_escaped_tag}" could not be found.', 
                 #ephemeral=True
             )
+        if len(_clan_data) > 1:
+            self.bot.log(f"[WARNING] `/clan stats {tag}` yielded more than one clan! This should not be possible!")
+        _clan_data = _clan_data[0]
 
         ## Get clan members
         _clan_members = self.bot.db_backend.leftJoin(
@@ -103,17 +112,6 @@ class CogClanStats(discord.Cog):
                 f':warning: This clan has no members? Wat.', 
                 #ephemeral=True
             )
-        
-        ## Get clan rank
-        _clan_rank = self.bot.db_backend.getOne(
-            "Leaderboard_clan",
-            ["`rank`"], 
-            ("clanid=%s", [_clan_data['clanid']])
-        )
-        if _clan_rank: 
-            _clan_rank = f"#{_clan_rank['rank']}"
-        else:
-            _clan_rank = ""
 
         ## Calculate additional data
         # Determine embed color
@@ -132,7 +130,7 @@ class CogClanStats(discord.Cog):
         # Summary
         _title = "Summary"
         _desc = f"**Tag: {_escaped_tag}**"
-        _desc += f"\n**Rank: {_clan_rank}**"
+        _desc += f"\n**Rank: #{_clan_data['rank']}**"
         _desc += f"\n\n{_clan_data['homepage']}"
         _desc += f"\n\n{_clan_data['info']}"
         _e_summary = discord.Embed(
@@ -165,7 +163,7 @@ class CogClanStats(discord.Cog):
         # Members
         _title = "Members"
         _desc = f"**Tag: {_escaped_tag}**"
-        _desc += f"\n**Rank: {_clan_rank}**"
+        _desc += f"\n**Rank: {_clan_data['rank']}**"
         _desc += f"\n### Clan {_title}:"
         _members = "```\n"
         _roles = "```\n"
