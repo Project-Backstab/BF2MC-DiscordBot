@@ -1,16 +1,18 @@
 """CogPlayerStats.py
 
 Handles tasks related to checking player stats and info.
-Date: 08/23/2024
+Date: 08/24/2024
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
 
 import hashlib
+import asyncio
+from datetime import datetime
 from urllib.parse import quote as url_escape
 
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 from discord.ext.pages import Paginator, Page
 import common.CommonStrings as CS
 
@@ -86,6 +88,18 @@ class CogPlayerStats(discord.Cog):
                 "profileid INT NOT NULL, "
                 "patchid TINYINT UNSIGNED NOT NULL, "
                 "date_earned DATE NOT NULL"
+            ")"
+        )
+        ## Setup MySQL table 'PlayerMsgQueue'
+        #self.bot.db_discord.query("DROP TABLE PlayerMsgQueue") # DEBUGGING
+        self.bot.db_discord.query(
+            "CREATE TABLE IF NOT EXISTS PlayerMsgQueue ("
+                "id INT AUTO_INCREMENT PRIMARY KEY, "
+                "datetime_queued DATETIME NOT NULL, "
+                "author VARCHAR(32) NOT NULL, "
+                "profileid INT NOT NULL, "
+                "uniquenick VARCHAR(32) NOT NULL, "
+                "msg TINYTEXT NOT NULL"
             ")"
         )
 
@@ -183,6 +197,60 @@ class CogPlayerStats(discord.Cog):
         Runs when the cog is successfully cached within the Discord API.
         """
         self.bot.log("[PlayerStats] Successfully cached!")
+        
+        # Start MsgQueueLoop Loop
+        if not self.MsgQueueLoop.is_running():
+            _interval = self.bot.config['Moderation']['MsgQueueIntervalMin']
+            self.MsgQueueLoop.change_interval(minutes = _interval)
+            self.MsgQueueLoop.start()
+            self.bot.log(f"[PlayerStats] MsgQueueLoop started ({_interval} min. interval).")
+    
+
+    @tasks.loop(minutes=30)
+    async def MsgQueueLoop(self):
+        """Task Loop: Message Queue Loop
+        
+        Runs every configured interval period, queries queued messages for players from the DB, 
+        and tries to send these messages to the players if they are online.
+        """
+        # Update interval if it has changed
+        _interval = self.bot.config['Moderation']['MsgQueueIntervalMin']
+        if self.MsgQueueLoop.minutes != _interval:
+            self.MsgQueueLoop.change_interval(minutes = _interval)
+        
+        # Get all queued messages
+        _dbEntries = self.bot.db_discord.getAll(
+            "PlayerMsgQueue",
+            ["id", "datetime_queued", "profileid", "msg"]
+        )
+        if _dbEntries == None: return
+
+        # Try to send all messages, and record successful sends
+        self.bot.log(f"[MsgQueueLoop] Attempting to send {self.bot.infl.no('message', len(_dbEntries))} queued to {self.bot.infl.plural('player', _dbEntries)}...")
+        _sent_msg_ids = []
+        for _e in _dbEntries:
+            _response = await self.bot.query_api(
+                "admin/message", 
+                password=self.bot.config['API']['Password'], 
+                message=url_escape(f"[{_e['datetime_queued'].strftime('%m/%d/%y')}] {_e['msg']}"), 
+                profileid=_e['profileid']
+            )
+            if isinstance(_response, Exception):
+                self.bot.log("[MsgQueueLoop] Failed! (Is the BFMCspy API down?)")
+                return
+            elif _response and _response['result'] == 'OK':
+                _sent_msg_ids.append(str(_e['id']))
+                await asyncio.sleep(1) # Sleep for 1 sec. to avoid spamming PS2
+        
+        # Remove sent messages from queue
+        _num_msgs_sent = len(_sent_msg_ids)
+        _num_msgs_remain = len(_dbEntries) - _num_msgs_sent
+        if _num_msgs_sent > 0:
+            self.bot.db_discord.delete(
+                "PlayerMsgQueue", 
+                (f"id IN ({','.join(_sent_msg_ids)})", [])
+            )
+        self.bot.log(f"[MsgQueueLoop] {self.bot.infl.no('message', _num_msgs_sent)} {self.bot.infl.plural_verb('was', _num_msgs_sent)} sent. {self.bot.infl.no('message', _num_msgs_remain)} remain.")
 
 
     """Slash Command Group: /player
@@ -834,7 +902,7 @@ class CogPlayerStats(discord.Cog):
         message: discord.Option(
             str, 
             description="Message to send", 
-            max_length=255, 
+            max_length=244, # 255-11 to fit timestamp if msg needs to be sent later
             required=True
         ) # type: ignore
     ):
@@ -869,16 +937,26 @@ class CogPlayerStats(discord.Cog):
             message=url_escape(message), 
             profileid=_profileid
         )
-        if _response:
-            if _response['result'] == 'OK':
-                self.bot.log(f'[Admin] {ctx.author.name} sent the following in-game message to {nickname}:\n\t"{message}"')
+        if not isinstance(_response, Exception):
+            self.bot.log(f'[Admin] {ctx.author.name} sent the following in-game message to {nickname}:\n\t"{message}"')
+            if _response == None: # Current response if player is offline
+                self.bot.db_discord.insert(
+                    "PlayerMsgQueue", 
+                    {
+                        "datetime_queued": datetime.now(),
+                        "author": ctx.author.name,
+                        "profileid": _profileid,
+                        "uniquenick": nickname,
+                        "msg": message
+                    }
+                )
                 return await ctx.respond(
-                    f":white_check_mark: Message sent to {_escaped_nickname}!", 
+                    f":information_source: Message will be sent to {_escaped_nickname} the next time they are online.", 
                     ephemeral=True
                 )
-            else:
+            elif _response['result'] == 'OK': # Current response if player is online
                 return await ctx.respond(
-                    f":warning: Unable to send message to {_escaped_nickname} because they are not currently online.", 
+                    f":white_check_mark: Message sent to {_escaped_nickname}!", 
                     ephemeral=True
                 )
         else:
@@ -927,7 +1005,7 @@ class CogPlayerStats(discord.Cog):
             password=self.bot.config['API']['Password'], 
             profileid=_profileid
         )
-        if _response:
+        if not isinstance(_response, Exception):
             if _response['result'] == 'OK':
                 self.bot.log(f"[Admin] {ctx.author.name} kicked {nickname} from BFMCspy.")
                 return await ctx.respond(
@@ -1266,9 +1344,9 @@ class CogPlayerStats(discord.Cog):
         # Get IP geolocation data
         _ip_geo_data = await self.bot.query_api(
             f"{_ip}/json", 
-            "https://ipinfo.io"
+            "https://ipinfoTEST.io"
         )
-        if _ip_geo_data == None:
+        if isinstance(_ip_geo_data, Exception):
             _ip_geo_data = {
                 "country": "Error",
                 "region": "Error"

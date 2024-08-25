@@ -1,7 +1,7 @@
 """bot.py
 
 A subclass of `discord.Bot` that adds ease-of-use instance variables and functions (e.g. database object).
-Date: 08/22/2024
+Date: 08/24/2024
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -354,15 +354,15 @@ class BackstabBot(discord.Bot):
             return _response.json()
         else:
             self.log(f"\tFailed!\n\t{_response}", time=False, file=False)
-            return None
+            return _response
     
-    async def cmd_query_api(self, url_subfolder: str, **kwargs) -> json:
+    async def cmd_query_api(self, url_subfolder: str = None, **kwargs) -> json:
         """Command Query API
         
         Same as Query API, but raises a CommandError if the query failed.
         """
         _query = await self.query_api(url_subfolder, **kwargs)
-        if _query == None:
+        if isinstance(_query, Exception):
             raise commands.CommandError(
                 ":warning: There was an error retrieving this data. The BFMCspy API may be down at the moment."
             )

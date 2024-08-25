@@ -1,7 +1,7 @@
 """CogServerStatus.py
 
 Handles tasks related to checking server status and info.
-Date: 03/14/2024
+Date: 08/24/2024
 Authors: David Wolfe (Red-Thirten)
 Licensed under GNU GPLv3 - See LICENSE for more details.
 """
@@ -242,7 +242,7 @@ class CogServerStatus(discord.Cog):
         ## Create live server list (excluding dead/unverified servers) & calculate players online
         _live_servers = []
         _total_players = 0
-        if _servers != None:
+        if not isinstance(_servers, Exception):
             for _server in _servers:
                 if (_server['is_alive'] and _server['verified']):
                     _live_servers.append(_server)
@@ -260,7 +260,7 @@ class CogServerStatus(discord.Cog):
 
         ## Update server status channel name
         if self.server_status == "automatic":
-            if _servers == None:
+            if isinstance(_servers, Exception):
                 await self.set_status_channel_name("unknown")
             elif len(_live_servers) > 0:
                 await self.set_status_channel_name("online")
