@@ -384,7 +384,7 @@ class CogServerStatus(discord.Cog):
         _msg += "\n- You will get notification from me here when a server:"
         _msg += "\n  - Matches the gamemode you are looking for"
         _msg += "\n  - Meets your minimum number of people playing and/or waiting for that gamemode"
-        _msg += "\n- Use `/lfg edit` (in the BF2MC Discord server; not here) to edit your notification preferences."
+        _msg += "\n- Use `/lfg edit` to edit your notification preferences."
         _msg += "\n- Use `/lfg leave` to leave the LFG queue."
         await ctx.author.send(_msg)
         return await ctx.respond(embed=_embed)
