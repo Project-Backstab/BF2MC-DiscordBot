@@ -120,7 +120,8 @@ def get_iso3166_from_region(region_id: int) -> str:
     if region_id == 1:
         return "us"
     elif region_id == 2048:
-        return "cn"
+        #return "cn"
+        return "br" # Servers are temporarily using the Chinese region ID to represent Brazil
     else:
         return "de"
     
